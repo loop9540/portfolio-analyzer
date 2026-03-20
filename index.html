@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Analyzer — A03FH0F0</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ea;
+    --muted: #8b8fa3;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #a78bfa;
+    --orange: #f59e0b;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    margin-bottom: 24px;
+  }
+  .upload-zone:hover { border-color: var(--blue); }
+  .upload-zone.hidden { display: none; }
+  .upload-zone input { display: none; }
+  .upload-zone p { color: var(--muted); font-size: 15px; }
+  .upload-zone .icon { font-size: 36px; margin-bottom: 8px; }
+
+  .dashboard { display: none; }
+  .dashboard.visible { display: block; }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .kpi .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 4px; }
+  .kpi .value { font-size: 22px; font-weight: 700; }
+  .kpi .value.positive { color: var(--green); }
+  .kpi .value.negative { color: var(--red); }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .panel h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .panel.full { grid-column: 1 / -1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.pos { color: var(--green); }
+  td.neg { color: var(--red); }
+  .price-input {
+    background: var(--border);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 4px 8px;
+    width: 80px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .price-input:focus { border-color: var(--blue); outline: none; }
+  .ticker-badge {
+    display: inline-block;
+    background: var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .chart-container { position: relative; height: 300px; }
+  .chart-container.tall { height: 400px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab.active { background: var(--border); color: var(--text); border-color: var(--border); }
+  .tab:hover { color: var(--text); }
+
+  .activity-list { max-height: 400px; overflow-y: auto; }
+  .activity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-date { color: var(--muted); font-size: 11px; min-width: 80px; }
+  .activity-desc { flex: 1; margin: 0 12px; }
+  .activity-amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .scrollable { max-height: 500px; overflow-y: auto; }
+  .scrollable::-webkit-scrollbar { width: 6px; }
+  .scrollable::-webkit-scrollbar-track { background: transparent; }
+  .scrollable::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>Portfolio Analyzer</h1>
+<p class="subtitle">Account A03FH0F0 — Options Wheel Strategy</p>
+
+<div class="upload-zone" id="uploadZone">
+  <div class="icon">📂</div>
+  <p>Drop your AccountActivities CSV here, or click to browse</p>
+  <input type="file" id="fileInput" accept=".csv">
+</div>
+
+<div class="dashboard" id="dashboard">
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="grid-2">
+    <div class="panel full">
+      <h2>Net Premium by Ticker</h2>
+      <div class="chart-container"><canvas id="premiumChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>Premium Breakdown</h2>
+      <div class="scrollable">
+        <table id="premiumTable">
+          <thead><tr><th>Ticker</th><th style="text-align:right">Sold</th><th style="text-align:right">Bought</th><th style="text-align:right">Net</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Stock Assignments</h2>
+      <div class="scrollable">
+        <table id="assignmentTable">
+          <thead><tr><th>Ticker</th><th style="text-align:right">Shares</th><th style="text-align:right">Cost Basis</th><th>Date</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:24px">
+    <h2>Unrealized P&amp;L on Assigned Positions</h2>
+    <div id="pnlLoading" style="color:var(--muted);font-size:13px;padding:12px 0">Fetching live prices...</div>
+    <div class="scrollable">
+      <table id="pnlTable" style="display:none">
+        <thead><tr><th>Ticker</th><th style="text-align:right">Shares</th><th style="text-align:right">Cost</th><th style="text-align:right">Current</th><th style="text-align:right">Unrealized</th><th style="text-align:right">Premium</th><th style="text-align:right">Net P&amp;L</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:24px">
+    <h2>All Transactions</h2>
+    <div class="tabs" id="tranTabs">
+      <div class="tab active" data-filter="all">All</div>
+      <div class="tab" data-filter="options">Options</div>
+      <div class="tab" data-filter="stocks">Stocks</div>
+      <div class="tab" data-filter="fees">Fees</div>
+      <div class="tab" data-filter="tbills">T-Bills</div>
+      <div class="tab" data-filter="other">Other</div>
+    </div>
+    <div class="activity-list scrollable" id="activityList"></div>
+  </div>
+</div>
+
+<script>
+const COLORS = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#a78bfa','#06b6d4','#ec4899','#f97316','#14b8a6','#8b5cf6','#eab308','#64748b','#e11d48','#0ea5e9','#84cc16','#d946ef','#fb923c','#2dd4bf'];
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const dashboard = document.getElementById('dashboard');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = '#3b82f6'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.style.borderColor = '';
+  if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) processFile(fileInput.files[0]); });
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = parseCSVLine(lines[0]);
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const vals = parseCSVLine(line);
+    const obj = {};
+    headers.forEach((h, i) => obj[h.trim()] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') { inQuotes = !inQuotes; }
+    else if (line[i] === ',' && !inQuotes) { result.push(current); current = ''; }
+    else { current += line[i]; }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseAmount(s) {
+  if (!s) return 0;
+  return parseFloat(s.replace(/[$,]/g, '')) || 0;
+}
+
+function parseTicker(desc) {
+  if (!desc) return null;
+  const m = desc.match(/(?:PUT|CALL)\s+100\s+(\w+)/);
+  return m ? m[1] : null;
+}
+
+function parseOptionType(desc) {
+  if (!desc) return null;
+  const m = desc.match(/^(PUT|CALL)/);
+  return m ? m[1] : null;
+}
+
+function fmtMoney(n) {
+  const abs = Math.abs(n);
+  const formatted = abs >= 1000
+    ? abs.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    : abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? '-' : '') + '$' + formatted;
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const rows = parseCSV(e.target.result);
+    analyze(rows);
+    uploadZone.classList.add('hidden');
+    dashboard.classList.add('visible');
+  };
+  reader.readAsText(file);
+}
+
+let allTransactions = [];
+let charts = {};
+
+function analyze(rows) {
+  // Filter out cancels by pairing them
+  const cancelIndices = new Set();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r['Tran Types'] && r['Tran Types'].startsWith('CANCEL')) {
+      cancelIndices.add(i);
+      // Find the matching original transaction to cancel
+      const origType = r['Tran Types'].replace('CANCEL ', '');
+      for (let j = i + 1; j < rows.length; j++) {
+        if (!cancelIndices.has(j) && rows[j]['Tran Types'] === origType &&
+            rows[j].Description === r.Description &&
+            Math.abs(parseAmount(rows[j].Amount) + parseAmount(r.Amount)) < 0.01) {
+          cancelIndices.add(j);
+          break;
+        }
+      }
+    }
+  }
+
+  const txns = rows.filter((_, i) => !cancelIndices.has(i));
+
+  // Classify transactions
+  const optionTrades = [];
+  const stockTrades = [];
+  const fees = [];
+  const dividends = [];
+  const tbills = [];
+  const assignments = [];
+  const expirations = [];
+  const transfers = [];
+  const interest = [];
+
+  txns.forEach(r => {
+    const type = r['Tran Types'] || '';
+    const desc = r.Description || '';
+    const amt = parseAmount(r.Amount);
+
+    if (type === 'ASSIGNMENT') {
+      assignments.push(r);
+    } else if (type === 'EXPIRING RIGHTS/WARRANTS') {
+      expirations.push(r);
+    } else if (type === 'MANAGEMENT FEE' || type === 'GOODS & SERVICES TAX') {
+      fees.push(r);
+    } else if (type === 'US CASH DIVIDEND' || type === 'IRS WHT(TREATY) - POOL 2') {
+      dividends.push(r);
+    } else if (type === 'MONTHLY INTEREST') {
+      interest.push(r);
+    } else if (type === 'INTERNAL TRANSFER' || type === 'MANDATORY EXCHANGE') {
+      transfers.push(r);
+    } else if (desc.includes('US T BILL')) {
+      tbills.push(r);
+    } else if (desc.match(/^(PUT|CALL)\s+100/)) {
+      optionTrades.push(r);
+    } else if (r.Symbol && (type === 'BUY' || type === 'SELL') && !desc.match(/^(PUT|CALL)/)) {
+      stockTrades.push(r);
+    }
+  });
+
+  // Premium by ticker
+  const premiumByTicker = {};
+  optionTrades.forEach(r => {
+    const ticker = parseTicker(r.Description);
+    if (!ticker) return;
+    if (!premiumByTicker[ticker]) premiumByTicker[ticker] = { sold: 0, bought: 0 };
+    const amt = parseAmount(r.Amount);
+    const type = r['Tran Types'];
+    if (type === 'SELL') premiumByTicker[ticker].sold += amt;
+    else if (type === 'BUY') premiumByTicker[ticker].bought += Math.abs(amt);
+  });
+
+  const premiumEntries = Object.entries(premiumByTicker)
+    .map(([ticker, v]) => ({ ticker, sold: v.sold, bought: v.bought, net: v.sold - v.bought }))
+    .sort((a, b) => b.net - a.net);
+
+  const totalSold = premiumEntries.reduce((s, e) => s + e.sold, 0);
+  const totalBought = premiumEntries.reduce((s, e) => s + e.bought, 0);
+  const totalNet = totalSold - totalBought;
+
+  // Fees
+  const totalMgmtFees = fees.filter(r => r['Tran Types'] === 'MANAGEMENT FEE').reduce((s, r) => s + Math.abs(parseAmount(r.Amount)), 0);
+  const totalGST = fees.filter(r => r['Tran Types'] === 'GOODS & SERVICES TAX').reduce((s, r) => s + Math.abs(parseAmount(r.Amount)), 0);
+
+  // Dividends
+  const totalDividends = dividends.filter(r => r['Tran Types'] === 'US CASH DIVIDEND').reduce((s, r) => s + parseAmount(r.Amount), 0);
+  const totalWithholding = dividends.filter(r => r['Tran Types'] === 'IRS WHT(TREATY) - POOL 2').reduce((s, r) => s + Math.abs(parseAmount(r.Amount)), 0);
+
+  // Interest
+  const totalInterest = interest.reduce((s, r) => s + parseAmount(r.Amount), 0);
+
+  // Assignments
+  const assignmentDetails = [];
+  assignments.forEach(r => {
+    const desc = r.Description || '';
+    const m = desc.match(/(PUT|CALL)\s+100\s+(\w+)\s+(\S+)\s+(\S+)/);
+    if (!m) return;
+    const ticker = m[2];
+    const qty = Math.abs(parseFloat(r.Quantity) || 0) * 100;
+    const strike = parseFloat(m[4]) || 0;
+    assignmentDetails.push({ ticker, shares: qty, strike, cost: qty * strike, date: r.Processed, type: m[1] });
+  });
+
+  // KPIs
+  const kpiRow = document.getElementById('kpiRow');
+  const netDividends = totalDividends - totalWithholding;
+  const totalFees = totalMgmtFees + totalGST;
+  const totalIncome = totalNet + netDividends + Math.max(totalInterest, 0);
+  const netAfterFees = totalIncome - totalFees;
+  const kpis = [
+    { label: 'Total Income', value: fmtMoney(totalIncome), cls: 'positive' },
+    { label: 'Total Fees', value: fmtMoney(-totalFees), cls: 'negative' },
+    { label: 'Net After Fees', value: fmtMoney(netAfterFees), cls: netAfterFees >= 0 ? 'positive' : 'negative' },
+    { label: 'Options Premium', value: fmtMoney(totalNet), cls: 'positive' },
+    { label: 'Dividends (Net)', value: fmtMoney(netDividends), cls: 'positive' },
+    { label: 'Bought to Close', value: fmtMoney(-totalBought), cls: 'negative' },
+  ];
+  kpiRow.innerHTML = kpis.map(k => `
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value ${k.cls}">${k.value}</div>
+    </div>
+  `).join('');
+
+  // Premium bar chart
+  if (charts.premium) charts.premium.destroy();
+  charts.premium = new Chart(document.getElementById('premiumChart'), {
+    type: 'bar',
+    data: {
+      labels: premiumEntries.map(e => e.ticker),
+      datasets: [{
+        label: 'Net Premium',
+        data: premiumEntries.map(e => e.net),
+        backgroundColor: premiumEntries.map((_, i) => COLORS[i % COLORS.length]),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtMoney(ctx.raw) } }
+      },
+      scales: {
+        x: { ticks: { color: '#8b8fa3' }, grid: { display: false } },
+        y: { ticks: { color: '#8b8fa3', callback: v => '$' + (v/1000).toFixed(0) + 'K' }, grid: { color: '#2a2d3a' } }
+      }
+    }
+  });
+
+  // Premium table
+  const tbody = document.querySelector('#premiumTable tbody');
+  let totalRow = { sold: 0, bought: 0, net: 0 };
+  tbody.innerHTML = premiumEntries.map(e => {
+    totalRow.sold += e.sold;
+    totalRow.bought += e.bought;
+    totalRow.net += e.net;
+    return `<tr>
+      <td><span class="ticker-badge">${e.ticker}</span></td>
+      <td class="num pos">${fmtMoney(e.sold)}</td>
+      <td class="num neg">${fmtMoney(-e.bought)}</td>
+      <td class="num ${e.net >= 0 ? 'pos' : 'neg'}">${fmtMoney(e.net)}</td>
+    </tr>`;
+  }).join('') + `<tr style="font-weight:700;border-top:2px solid var(--border)">
+    <td>TOTAL</td>
+    <td class="num pos">${fmtMoney(totalRow.sold)}</td>
+    <td class="num neg">${fmtMoney(-totalRow.bought)}</td>
+    <td class="num pos">${fmtMoney(totalRow.net)}</td>
+  </tr>`;
+
+  // Assignment table
+  const aBody = document.querySelector('#assignmentTable tbody');
+  aBody.innerHTML = assignmentDetails.map(a => `<tr>
+    <td><span class="ticker-badge">${a.ticker}</span></td>
+    <td class="num">${a.shares.toLocaleString()}</td>
+    <td class="num">${fmtMoney(a.cost)}</td>
+    <td style="color:var(--muted)">${a.date}</td>
+  </tr>`).join('');
+
+  // Unrealized P&L — aggregate positions by ticker
+  const positions = {};
+  assignmentDetails.forEach(a => {
+    if (!positions[a.ticker]) positions[a.ticker] = { shares: 0, totalCost: 0 };
+    positions[a.ticker].shares += a.shares;
+    positions[a.ticker].totalCost += a.cost;
+  });
+  // Also include direct stock buys (from assignment-related purchases)
+  stockTrades.forEach(r => {
+    const ticker = r.Symbol;
+    const qty = Math.abs(parseFloat(r.Quantity) || 0);
+    const amt = Math.abs(parseAmount(r.Amount));
+    const type = r['Tran Types'];
+    if (type === 'BUY' && positions[ticker]) {
+      // Already tracked via assignment — skip duplicate counting
+    } else if (type === 'BUY') {
+      if (!positions[ticker]) positions[ticker] = { shares: 0, totalCost: 0 };
+      positions[ticker].shares += qty;
+      positions[ticker].totalCost += amt;
+    }
+  });
+
+  const tickers = Object.keys(positions);
+  if (tickers.length > 0) {
+    fetchPricesAndRenderPnL(tickers, positions, premiumByTicker);
+  }
+
+  // All transactions list
+  allTransactions = txns.map(r => {
+    const type = r['Tran Types'] || '';
+    const desc = r.Description || '';
+    let category = 'other';
+    if (desc.match(/^(PUT|CALL)\s+100/) || type === 'ASSIGNMENT' || type === 'EXPIRING RIGHTS/WARRANTS') category = 'options';
+    else if (r.Symbol && (type === 'BUY' || type === 'SELL') && !desc.includes('T BILL')) category = 'stocks';
+    else if (type === 'MANAGEMENT FEE' || type === 'GOODS & SERVICES TAX') category = 'fees';
+    else if (desc.includes('US T BILL')) category = 'tbills';
+    return { ...r, _category: category, _amount: parseAmount(r.Amount) };
+  });
+
+  renderTransactions('all');
+
+  // Tab clicks
+  document.querySelectorAll('#tranTabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#tranTabs .tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderTransactions(tab.dataset.filter);
+    });
+  });
+}
+
+function renderTransactions(filter) {
+  const list = document.getElementById('activityList');
+  const filtered = filter === 'all' ? allTransactions : allTransactions.filter(t => t._category === filter);
+  list.innerHTML = filtered.map(t => {
+    const amt = t._amount;
+    const cls = amt > 0 ? 'pos' : amt < 0 ? 'neg' : '';
+    return `<div class="activity-item">
+      <span class="activity-date">${t.Processed}</span>
+      <span class="activity-desc">${t['Tran Types']} ${t.Symbol ? '<span class="ticker-badge">' + t.Symbol + '</span> ' : ''}${t.Description}</span>
+      <span class="activity-amount ${cls}">${amt !== 0 ? fmtMoney(amt) : '-'}</span>
+    </div>`;
+  }).join('');
+}
+
+// Auto-load if CSV is embedded via query param
+const params = new URLSearchParams(window.location.search);
+if (params.get('auto')) {
+  fetch(params.get('auto')).then(r => r.text()).then(text => {
+    const rows = parseCSV(text);
+    analyze(rows);
+    uploadZone.classList.add('hidden');
+    dashboard.classList.add('visible');
+  }).catch(() => {});
+}
+
+async function fetchPricesAndRenderPnL(tickers, positions, premiumByTicker) {
+  const loading = document.getElementById('pnlLoading');
+  const table = document.getElementById('pnlTable');
+  const prices = {};
+
+  // Try multiple CORS proxies for Yahoo Finance
+  const proxies = [
+    t => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?range=1d&interval=1d`)}`,
+    t => `https://corsproxy.io/?url=https://query1.finance.yahoo.com/v8/finance/chart/${t}?range=1d&interval=1d`,
+  ];
+
+  for (const proxyFn of proxies) {
+    const missing = tickers.filter(t => prices[t] == null);
+    if (missing.length === 0) break;
+    await Promise.all(missing.map(async ticker => {
+      try {
+        const resp = await fetch(proxyFn(ticker));
+        const data = await resp.json();
+        prices[ticker] = data.chart.result[0].meta.regularMarketPrice;
+      } catch { /* try next proxy */ }
+    }));
+  }
+
+  // Build row data
+  const rowData = tickers.map(ticker => {
+    const pos = positions[ticker];
+    const avgCost = pos.totalCost / pos.shares;
+    const premium = premiumByTicker[ticker] ? premiumByTicker[ticker].sold - premiumByTicker[ticker].bought : 0;
+    return { ticker, shares: pos.shares, avgCost, premium, fetchedPrice: prices[ticker] || null };
+  });
+
+  renderPnLTable(rowData);
+  loading.style.display = 'none';
+  table.style.display = 'table';
+}
+
+function renderPnLTable(rowData) {
+  const tbody = document.querySelector('#pnlTable tbody');
+
+  function recalc() {
+    let totalUnrealized = 0, totalPremium = 0, totalNetPnL = 0;
+
+    const computed = rowData.map(r => {
+      const input = document.getElementById('price-' + r.ticker);
+      const price = input ? parseFloat(input.value) : null;
+      if (!price || isNaN(price)) return { ...r, currentPrice: null, unrealized: 0, netPnL: 0 };
+      const unrealized = (price - r.avgCost) * r.shares;
+      const netPnL = unrealized + r.premium;
+      totalUnrealized += unrealized;
+      totalPremium += r.premium;
+      totalNetPnL += netPnL;
+      return { ...r, currentPrice: price, unrealized, netPnL };
+    }).sort((a, b) => (a.netPnL || 0) - (b.netPnL || 0));
+
+    // Update computed cells
+    computed.forEach(r => {
+      const uEl = document.getElementById('u-' + r.ticker);
+      const nEl = document.getElementById('n-' + r.ticker);
+      if (r.currentPrice) {
+        uEl.textContent = fmtMoney(r.unrealized);
+        uEl.className = 'num ' + (r.unrealized >= 0 ? 'pos' : 'neg');
+        nEl.textContent = fmtMoney(r.netPnL);
+        nEl.className = 'num ' + (r.netPnL >= 0 ? 'pos' : 'neg');
+      } else {
+        uEl.textContent = '-';
+        uEl.className = 'num';
+        nEl.textContent = '-';
+        nEl.className = 'num';
+      }
+    });
+
+    document.getElementById('pnl-total-u').textContent = fmtMoney(totalUnrealized);
+    document.getElementById('pnl-total-u').className = 'num ' + (totalUnrealized >= 0 ? 'pos' : 'neg');
+    document.getElementById('pnl-total-p').textContent = fmtMoney(totalPremium);
+    document.getElementById('pnl-total-n').textContent = fmtMoney(totalNetPnL);
+    document.getElementById('pnl-total-n').className = 'num ' + (totalNetPnL >= 0 ? 'pos' : 'neg');
+  }
+
+  tbody.innerHTML = rowData.map(r => `<tr>
+    <td><span class="ticker-badge">${r.ticker}</span></td>
+    <td class="num">${r.shares.toLocaleString()}</td>
+    <td class="num">$${r.avgCost.toFixed(2)}</td>
+    <td class="num"><input class="price-input" id="price-${r.ticker}" type="number" step="0.01" value="${r.fetchedPrice ? r.fetchedPrice.toFixed(2) : ''}" placeholder="Price"></td>
+    <td id="u-${r.ticker}" class="num">-</td>
+    <td class="num pos">${fmtMoney(r.premium)}</td>
+    <td id="n-${r.ticker}" class="num">-</td>
+  </tr>`).join('') + `<tr style="font-weight:700;border-top:2px solid var(--border)">
+    <td>TOTAL</td><td></td><td></td><td></td>
+    <td id="pnl-total-u" class="num">-</td>
+    <td id="pnl-total-p" class="num pos">-</td>
+    <td id="pnl-total-n" class="num">-</td>
+  </tr>`;
+
+  tbody.querySelectorAll('.price-input').forEach(input => {
+    input.addEventListener('input', recalc);
+  });
+
+  recalc();
+}
+</script>
+</body>
+</html>
