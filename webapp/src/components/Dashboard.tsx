@@ -6,6 +6,7 @@ import PremiumTable from "./PremiumTable";
 import AssignmentTable from "./AssignmentTable";
 import PnLTable from "./PnLTable";
 import TransactionList from "./TransactionList";
+import Critique from "./Critique";
 
 export default function Dashboard({ data }: { data: AnalysisResult }) {
   return (
@@ -20,6 +21,7 @@ export default function Dashboard({ data }: { data: AnalysisResult }) {
         positions={data.positions}
         premiumByTicker={data.premiumByTicker}
       />
+      <Critique data={data} />
       <TransactionList transactions={data.transactions} />
     </div>
   );
