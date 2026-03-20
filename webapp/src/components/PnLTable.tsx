@@ -35,21 +35,43 @@ export default function PnLTable({ positions, premiumByTicker }: Props) {
       return { ticker, shares: pos.shares, avgCost, premium, currentPrice: null };
     });
 
-    fetch(`/api/prices?tickers=${tickers.join(",")}`)
-      .then((r) => r.json())
-      .then((prices: Record<string, number | null>) => {
-        setRows(
-          initialRows.map((r) => ({
-            ...r,
-            currentPrice: prices[r.ticker] ?? null,
-          }))
+    // Fetch prices client-side via CORS proxies
+    const fetchPrices = async () => {
+      const prices: Record<string, number | null> = {};
+      const proxies = [
+        (t: string) =>
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?range=1d&interval=1d`)}`,
+        (t: string) =>
+          `https://corsproxy.io/?url=https://query1.finance.yahoo.com/v8/finance/chart/${t}?range=1d&interval=1d`,
+      ];
+
+      for (const proxyFn of proxies) {
+        const missing = tickers.filter((t) => prices[t] == null);
+        if (missing.length === 0) break;
+        await Promise.all(
+          missing.map(async (ticker) => {
+            try {
+              const resp = await fetch(proxyFn(ticker));
+              const data = await resp.json();
+              prices[ticker] =
+                data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
+            } catch {
+              /* try next proxy */
+            }
+          })
         );
-        setLoading(false);
-      })
-      .catch(() => {
-        setRows(initialRows);
-        setLoading(false);
-      });
+      }
+
+      setRows(
+        initialRows.map((r) => ({
+          ...r,
+          currentPrice: prices[r.ticker] ?? null,
+        }))
+      );
+      setLoading(false);
+    };
+
+    fetchPrices();
   }, [positions, premiumByTicker]);
 
   const updatePrice = useCallback((ticker: string, value: string) => {
