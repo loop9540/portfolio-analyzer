@@ -2,6 +2,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { Position } from "@/lib/analyze";
 import { fmtMoney } from "@/lib/parseCSV";
+import {
+  fetchFullOptionChain,
+  OptionChainData,
+  OptionContract,
+} from "@/lib/optionChain";
 
 interface Props {
   positions: Record<string, Position>;
@@ -16,108 +21,18 @@ interface RowData {
   currentPrice: number | null;
 }
 
-interface Suggestion {
-  strike: number;
-  dte: number;
-  expLabel: string;
-  estPremium: number;
-  contracts: number;
-  totalIncome: number;
-  note: string;
-}
-
 function estimateCallPremium(
   currentPrice: number,
   strike: number,
   dte: number,
   iv: number = 0.6
 ): number {
-  // Simplified Black-Scholes-ish estimation for covered call premium
   const t = dte / 365;
   const moneyness = (strike - currentPrice) / currentPrice;
   const timeValue = currentPrice * iv * Math.sqrt(t) * 0.4;
   const intrinsic = Math.max(currentPrice - strike, 0);
   const otmDiscount = Math.exp(-moneyness * 5);
   return Math.max(intrinsic + timeValue * otmDiscount, 0.01);
-}
-
-function generateSuggestions(
-  ticker: string,
-  currentPrice: number,
-  avgCost: number,
-  shares: number
-): Suggestion[] {
-  const contracts = Math.floor(shares / 100);
-  if (contracts === 0 || currentPrice <= 0) return [];
-
-  const suggestions: Suggestion[] = [];
-  const now = new Date();
-
-  // Generate for 3 timeframes
-  const timeframes = [
-    { dte: 7, label: "Weekly" },
-    { dte: 30, label: "Monthly (~30 DTE)" },
-    { dte: 45, label: "45 DTE" },
-  ];
-
-  // Strike strategies
-  const strikeStrategies = [
-    {
-      name: "Aggressive",
-      strikeOffset: 0.02,
-      note: "High premium, likely assignment",
-    },
-    {
-      name: "Moderate",
-      strikeOffset: 0.05,
-      note: "Balanced premium vs. upside",
-    },
-    {
-      name: "At cost basis",
-      strikeAbs: avgCost,
-      note: "Exit at breakeven if called",
-    },
-  ];
-
-  for (const tf of timeframes) {
-    const expDate = new Date(now);
-    expDate.setDate(expDate.getDate() + tf.dte);
-    // Round to next Friday
-    const dayOfWeek = expDate.getDay();
-    const daysToFri = (5 - dayOfWeek + 7) % 7 || 7;
-    expDate.setDate(expDate.getDate() + (dayOfWeek === 5 ? 0 : daysToFri));
-    const expLabel = `${tf.label} — ${expDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-    const actualDte = Math.max(
-      Math.round(
-        (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-      ),
-      1
-    );
-
-    for (const ss of strikeStrategies) {
-      const strike =
-        ss.strikeAbs ??
-        Math.round((currentPrice * (1 + ss.strikeOffset)) * 2) / 2;
-
-      // Skip if strike is below current price for "at cost basis" when in profit
-      if (strike < currentPrice * 0.95) continue;
-
-      const est = estimateCallPremium(currentPrice, strike, actualDte);
-      const roundedPremium = Math.round(est * 100) / 100;
-
-      suggestions.push({
-        strike,
-        dte: actualDte,
-        expLabel,
-        estPremium: roundedPremium,
-        contracts,
-        totalIncome: roundedPremium * contracts * 100,
-        note: ss.note,
-      });
-    }
-  }
-
-  return suggestions;
 }
 
 export default function PnLTable({ positions, premiumByTicker }: Props) {
@@ -377,38 +292,153 @@ function TradeSuggestionPanel({
   shares: number;
   unrealizedLoss: number;
 }) {
-  const suggestions = generateSuggestions(ticker, currentPrice, avgCost, shares);
+  const [chainData, setChainData] = useState<OptionChainData | null>(null);
+  const [loadingChain, setLoadingChain] = useState(true);
   const contracts = Math.floor(shares / 100);
 
-  // Group by timeframe
-  const grouped: Record<string, Suggestion[]> = {};
-  for (const s of suggestions) {
-    if (!grouped[s.expLabel]) grouped[s.expLabel] = [];
-    grouped[s.expLabel].push(s);
+  useEffect(() => {
+    setLoadingChain(true);
+    fetchFullOptionChain(ticker).then((data) => {
+      setChainData(data);
+      setLoadingChain(false);
+    });
+  }, [ticker]);
+
+  if (loadingChain) {
+    return (
+      <div className="bg-purple-500/5 border-t border-purple-500/20 p-4">
+        <p className="text-sm text-[var(--muted)]">
+          Loading option chain for {ticker}...
+        </p>
+      </div>
+    );
   }
 
+  const isLive =
+    chainData && chainData.source === "live" && chainData.expirations.length > 0;
+
+  // Build display data per expiration
+  const now = Date.now() / 1000;
+  const expirations = isLive
+    ? chainData.expirations
+    : // Fallback: generate synthetic expirations
+      [7, 30, 45].map((d) => Math.floor(now) + d * 86400);
+
+  // For each expiration, find relevant strikes near currentPrice and avgCost
+  const sections = expirations.map((exp) => {
+    const dte = Math.max(Math.round((exp - now) / 86400), 1);
+    const expDate = new Date(exp * 1000);
+    const label =
+      dte <= 10
+        ? "Weekly"
+        : dte <= 35
+        ? "Monthly (~30 DTE)"
+        : "45 DTE";
+    const expLabel = `${label} — ${expDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+
+    const liveCalls = isLive ? chainData.calls[exp] || [] : [];
+
+    // Target strikes: aggressive (2% OTM), moderate (5% OTM), at cost basis
+    const targetStrikes = [
+      {
+        target: Math.round(currentPrice * 1.02 * 2) / 2,
+        note: "Aggressive — high premium, likely assignment",
+      },
+      {
+        target: Math.round(currentPrice * 1.05 * 2) / 2,
+        note: "Moderate — balanced premium vs. upside",
+      },
+      {
+        target: Math.round(avgCost * 2) / 2,
+        note: "At cost basis — exit at breakeven if called",
+      },
+    ].filter((s) => s.target >= currentPrice * 0.95);
+
+    // Deduplicate strikes
+    const seen = new Set<number>();
+    const uniqueStrikes = targetStrikes.filter((s) => {
+      if (seen.has(s.target)) return false;
+      seen.add(s.target);
+      return true;
+    });
+
+    const cards = uniqueStrikes.map((ts) => {
+      // Find closest live contract
+      let liveMatch: OptionContract | null = null;
+      if (liveCalls.length > 0) {
+        liveMatch = liveCalls.reduce((best, c) =>
+          Math.abs(c.strike - ts.target) < Math.abs(best.strike - ts.target)
+            ? c
+            : best
+        );
+        // Only use if within $1 of target
+        if (liveMatch && Math.abs(liveMatch.strike - ts.target) > 1) {
+          liveMatch = null;
+        }
+      }
+
+      const strike = liveMatch ? liveMatch.strike : ts.target;
+      const premium = liveMatch
+        ? liveMatch.lastPrice > 0
+          ? liveMatch.lastPrice
+          : liveMatch.bid > 0
+          ? (liveMatch.bid + liveMatch.ask) / 2
+          : estimateCallPremium(currentPrice, strike, dte)
+        : estimateCallPremium(currentPrice, strike, dte);
+
+      const roundedPremium = Math.round(premium * 100) / 100;
+      const totalIncome = roundedPremium * contracts * 100;
+      const isLivePrice = liveMatch != null && (liveMatch.lastPrice > 0 || liveMatch.bid > 0);
+
+      return {
+        strike,
+        premium: roundedPremium,
+        totalIncome,
+        note: ts.note,
+        isLivePrice,
+        bid: liveMatch?.bid ?? null,
+        ask: liveMatch?.ask ?? null,
+        volume: liveMatch?.volume ?? null,
+        openInterest: liveMatch?.openInterest ?? null,
+        iv: liveMatch?.impliedVolatility ?? null,
+      };
+    });
+
+    return { expLabel, dte, cards };
+  });
+
+  // Recovery estimate using monthly income
+  const monthlySection = sections.find((s) => s.dte >= 25 && s.dte <= 40);
+  const monthlyIncome = monthlySection?.cards[1]?.totalIncome ?? monthlySection?.cards[0]?.totalIncome ?? 0;
   const recoveryMonths =
-    unrealizedLoss > 0 && suggestions.length > 0
-      ? Math.ceil(
-          unrealizedLoss /
-            (suggestions.find((s) => s.dte >= 28 && s.dte <= 35)
-              ?.totalIncome ?? suggestions[0].totalIncome)
-        )
+    unrealizedLoss > 0 && monthlyIncome > 0
+      ? Math.ceil(unrealizedLoss / monthlyIncome)
       : null;
 
   return (
     <div className="bg-purple-500/5 border-t border-purple-500/20 p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-purple-400">
-          Covered Call Suggestions — {ticker}
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-purple-400">
+            Covered Call Suggestions — {ticker}
+          </h3>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+              isLive
+                ? "bg-green-500/20 text-green-400"
+                : "bg-yellow-500/20 text-yellow-400"
+            }`}
+          >
+            {isLive ? "LIVE" : "ESTIMATED"}
+          </span>
+        </div>
         <div className="flex gap-4 text-xs text-[var(--muted)]">
           <span>
             {contracts} contract{contracts !== 1 ? "s" : ""} available
           </span>
           <span>Current: ${currentPrice.toFixed(2)}</span>
           <span>Cost: ${avgCost.toFixed(2)}</span>
-          {recoveryMonths && unrealizedLoss > 0 && (
+          {recoveryMonths != null && unrealizedLoss > 0 && (
             <span className="text-yellow-400">
               Est. {recoveryMonths} month{recoveryMonths !== 1 ? "s" : ""} to
               recover {fmtMoney(unrealizedLoss)}
@@ -418,48 +448,72 @@ function TradeSuggestionPanel({
       </div>
 
       <div className="space-y-4">
-        {Object.entries(grouped).map(([label, sugs]) => (
-          <div key={label}>
+        {sections.map(({ expLabel, cards }) => (
+          <div key={expLabel}>
             <div className="text-xs font-medium text-[var(--muted)] mb-2 uppercase tracking-wide">
-              {label}
+              {expLabel}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              {sugs.map((s, i) => (
+              {cards.map((c, i) => (
                 <div
                   key={i}
                   className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-3"
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-semibold">
-                      ${s.strike.toFixed(1)} Call
+                      ${c.strike.toFixed(1)} Call
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
-                      ~${s.estPremium.toFixed(2)}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        c.isLivePrice
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-purple-500/20 text-purple-400"
+                      }`}
+                    >
+                      {c.isLivePrice ? "" : "~"}${c.premium.toFixed(2)}
                     </span>
                   </div>
                   <div className="text-xs text-[var(--muted)] mb-2">
-                    {s.note}
+                    {c.note}
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[var(--muted)]">
-                      {s.contracts}x contracts
-                    </span>
-                    <span className="text-green-500 font-semibold">
-                      {fmtMoney(s.totalIncome)}
-                    </span>
-                  </div>
-                  {s.strike < avgCost && (
-                    <div className="text-xs text-yellow-400 mt-1">
-                      Below cost basis — assignment locks in loss of{" "}
-                      {fmtMoney((avgCost - s.strike) * s.contracts * 100)}
+                  {c.isLivePrice && (
+                    <div className="flex gap-3 text-[10px] text-[var(--muted)] mb-2">
+                      {c.bid != null && (
+                        <span>
+                          Bid: ${c.bid.toFixed(2)} / Ask: $
+                          {c.ask?.toFixed(2)}
+                        </span>
+                      )}
+                      {c.volume != null && c.volume > 0 && (
+                        <span>Vol: {c.volume.toLocaleString()}</span>
+                      )}
+                      {c.openInterest != null && c.openInterest > 0 && (
+                        <span>OI: {c.openInterest.toLocaleString()}</span>
+                      )}
+                      {c.iv != null && c.iv > 0 && (
+                        <span>IV: {(c.iv * 100).toFixed(0)}%</span>
+                      )}
                     </div>
                   )}
-                  {s.strike >= avgCost && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--muted)]">
+                      {contracts}x contracts
+                    </span>
+                    <span className="text-green-500 font-semibold">
+                      {fmtMoney(c.totalIncome)}
+                    </span>
+                  </div>
+                  {c.strike < avgCost && (
+                    <div className="text-xs text-yellow-400 mt-1">
+                      Below cost basis — assignment locks in loss of{" "}
+                      {fmtMoney((avgCost - c.strike) * contracts * 100)}
+                    </div>
+                  )}
+                  {c.strike >= avgCost && (
                     <div className="text-xs text-green-400 mt-1">
                       If called: exit at{" "}
                       {fmtMoney(
-                        (s.strike - avgCost) * s.contracts * 100 +
-                          s.totalIncome
+                        (c.strike - avgCost) * contracts * 100 + c.totalIncome
                       )}{" "}
                       profit
                     </div>
