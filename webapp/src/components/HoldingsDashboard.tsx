@@ -560,9 +560,7 @@ function HoldingTradeSuggest({
 
       <div className="space-y-4">
         {sections.map(({ expLabel, cards, expTimestamp, isRealExp }) => {
-          const chainUrl = isRealExp
-            ? `https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}`
-            : `https://finance.yahoo.com/quote/${ticker}/options/`;
+          const chainUrl = `https://www.barchart.com/stocks/quotes/${ticker}/options?expiration=${new Date(expTimestamp * 1000).toISOString().slice(0, 10)}`;
           return (
           <div key={expLabel}>
             <div className="text-xs font-medium text-[var(--muted)] mb-2 uppercase tracking-wide">
