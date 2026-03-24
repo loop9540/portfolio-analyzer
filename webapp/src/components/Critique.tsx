@@ -1,5 +1,6 @@
 "use client";
 import { AnalysisResult } from "@/lib/analyze";
+import { HoldingsData } from "@/lib/parseHoldings";
 import { fmtMoney } from "@/lib/parseCSV";
 
 interface Insight {
@@ -8,7 +9,7 @@ interface Insight {
   detail: string;
 }
 
-function generateInsights(data: AnalysisResult): Insight[] {
+function generateInsights(data: AnalysisResult, holdings?: HoldingsData): Insight[] {
   const insights: Insight[] = [];
   const {
     premiumEntries,
@@ -98,16 +99,50 @@ function generateInsights(data: AnalysisResult): Insight[] {
     });
   }
 
-  // 7. Premium per ticker efficiency
-  const highEfficiency = premiumEntries.filter(
-    (e) => e.sold > 0 && e.bought / e.sold < 0.1 && e.net > 500
-  );
-  if (highEfficiency.length > 0) {
-    insights.push({
-      type: "positive",
-      title: `Top performers: ${highEfficiency.map((e) => e.ticker).join(", ")}`,
-      detail: `These tickers have high premium retention (>90%) and generated strong net income. Consider increasing allocation to these underlyings.`,
+  // 7. Premium per ticker efficiency — factor in unrealized G/L when holdings available
+  if (holdings) {
+    const equityMap = new Map(
+      holdings.equities.map((e) => [e.symbol.trim().toUpperCase(), e])
+    );
+    const truePnlByTicker = premiumEntries.map((e) => {
+      const eq = equityMap.get(e.ticker);
+      const unrealized = eq?.gl ?? 0;
+      return { ticker: e.ticker, net: e.net, unrealized, truePnL: e.net + unrealized };
     });
+
+    const trueWinners = truePnlByTicker
+      .filter((t) => t.truePnL > 500)
+      .sort((a, b) => b.truePnL - a.truePnL);
+    const trueLosers = truePnlByTicker
+      .filter((t) => t.truePnL < 0)
+      .sort((a, b) => a.truePnL - b.truePnL);
+
+    if (trueWinners.length > 0) {
+      insights.push({
+        type: "positive",
+        title: `True top performers: ${trueWinners.map((t) => t.ticker).join(", ")}`,
+        detail: `Factoring in both premium collected AND unrealized G/L: ${trueWinners.map((t) => `${t.ticker} (${fmtMoney(t.truePnL)} = ${fmtMoney(t.net)} premium ${t.unrealized >= 0 ? "+" : ""}${fmtMoney(t.unrealized)} unrealized)`).join(", ")}. These are your genuinely profitable positions.`,
+      });
+    }
+    if (trueLosers.length > 0) {
+      insights.push({
+        type: "warning",
+        title: `True underperformers: ${trueLosers.map((t) => t.ticker).join(", ")}`,
+        detail: `Despite premium collected, these positions are net negative when including unrealized losses: ${trueLosers.map((t) => `${t.ticker} (${fmtMoney(t.truePnL)} = ${fmtMoney(t.net)} premium ${t.unrealized >= 0 ? "+" : ""}${fmtMoney(t.unrealized)} unrealized)`).join(", ")}. Consider whether to continue wheeling these or cut losses.`,
+      });
+    }
+  } else {
+    // Fallback: premium-only analysis when no holdings data
+    const highEfficiency = premiumEntries.filter(
+      (e) => e.sold > 0 && e.bought / e.sold < 0.1 && e.net > 500
+    );
+    if (highEfficiency.length > 0) {
+      insights.push({
+        type: "positive",
+        title: `Top performers: ${highEfficiency.map((e) => e.ticker).join(", ")}`,
+        detail: `These tickers have high premium retention (>90%) and generated strong net income. Consider increasing allocation to these underlyings. Upload Holdings CSV for true P&L including unrealized gains/losses.`,
+      });
+    }
   }
 
   // 8. Small premium tickers (not worth the effort)
@@ -297,8 +332,8 @@ const COLORS = {
   },
 };
 
-export default function Critique({ data }: { data: AnalysisResult }) {
-  const insights = generateInsights(data);
+export default function Critique({ data, holdings }: { data: AnalysisResult; holdings?: HoldingsData }) {
+  const insights = generateInsights(data, holdings);
   const optimizations = generateOptimizations(data);
 
   return (

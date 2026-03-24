@@ -360,7 +360,7 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
       </div>
 
       {/* Critique & Optimization */}
-      <Critique data={activities} />
+      <Critique data={activities} holdings={holdings} />
 
       {/* Transactions */}
       <TransactionList transactions={activities.transactions} />
