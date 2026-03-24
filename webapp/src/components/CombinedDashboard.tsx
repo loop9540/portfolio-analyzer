@@ -7,6 +7,7 @@ import { fmtMoney } from "@/lib/parseCSV";
 import PremiumChart from "./PremiumChart";
 import PremiumTable from "./PremiumTable";
 import TransactionList from "./TransactionList";
+import Critique from "./Critique";
 import {
   fetchFullOptionChain,
   OptionChainData,
@@ -357,6 +358,9 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Critique & Optimization */}
+      <Critique data={activities} />
 
       {/* Transactions */}
       <TransactionList transactions={activities.transactions} />
