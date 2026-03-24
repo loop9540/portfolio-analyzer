@@ -79,7 +79,7 @@ export default function Home() {
             className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center text-sm hover:opacity-80 transition-opacity"
             title={dark ? "Switch to light mode" : "Switch to dark mode"}
           >
-            {dark ? "\u2600\uFE0F" : "\uD83C\uDF19"}
+            {dark ? "\u2606" : "\u263E"}
           </button>
         </div>
       </div>
