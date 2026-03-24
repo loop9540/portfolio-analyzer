@@ -7,6 +7,7 @@ import {
   OptionChainData,
   OptionContract,
 } from "@/lib/optionChain";
+import { snapStrike, findLiveMatch } from "@/lib/strikeSnap";
 
 function estimateCallPremium(
   currentPrice: number,
@@ -433,15 +434,15 @@ function HoldingTradeSuggest({
 
     const targetStrikes = [
       {
-        target: Math.round(currentPrice * 1.02 * 2) / 2,
+        target: snapStrike(currentPrice * 1.02, liveCalls),
         note: "Aggressive — high premium, likely assignment",
       },
       {
-        target: Math.round(currentPrice * 1.05 * 2) / 2,
+        target: snapStrike(currentPrice * 1.05, liveCalls),
         note: "Moderate — balanced premium vs. upside",
       },
       {
-        target: Math.round(avgCost * 2) / 2,
+        target: snapStrike(avgCost, liveCalls),
         note: "At cost basis — exit at breakeven if called",
       },
     ].filter((s) => s.target >= currentPrice * 0.95);
@@ -454,17 +455,7 @@ function HoldingTradeSuggest({
     });
 
     const cards = uniqueStrikes.map((ts) => {
-      let liveMatch: OptionContract | null = null;
-      if (liveCalls.length > 0) {
-        liveMatch = liveCalls.reduce((best, c) =>
-          Math.abs(c.strike - ts.target) < Math.abs(best.strike - ts.target)
-            ? c
-            : best
-        );
-        if (liveMatch && Math.abs(liveMatch.strike - ts.target) > 1) {
-          liveMatch = null;
-        }
-      }
+      const liveMatch = findLiveMatch(ts.target, liveCalls);
 
       const strike = liveMatch ? liveMatch.strike : ts.target;
       const premium = liveMatch
