@@ -117,6 +117,38 @@ export function parseHoldings(text: string): HoldingsData {
   };
 }
 
+export interface ParsedOption {
+  type: "PUT" | "CALL";
+  ticker: string;
+  expiry: string;
+  strike: number;
+  contracts: number;
+  isSold: boolean;
+  price: number;
+  avgCost: number;
+  marketValue: number;
+  gl: number;
+  glPct: number;
+}
+
+export function parseOptionHolding(h: Holding): ParsedOption | null {
+  const m = h.holding.match(/(PUT|CALL)\s+100\s+(\w+)\s+(\S+)\s+(\S+)/);
+  if (!m) return null;
+  return {
+    type: m[1] as "PUT" | "CALL",
+    ticker: m[2],
+    expiry: m[3],
+    strike: parseFloat(m[4]),
+    contracts: Math.abs(h.quantity),
+    isSold: h.quantity < 0,
+    price: h.price,
+    avgCost: h.averageCost,
+    marketValue: h.marketValue,
+    gl: h.gl,
+    glPct: h.glPct,
+  };
+}
+
 export function isHoldingsCSV(text: string): boolean {
   const firstLine = text.split("\n")[0] || "";
   return firstLine.includes("Asset Category") && firstLine.includes("Book Value");

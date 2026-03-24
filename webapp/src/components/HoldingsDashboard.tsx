@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { HoldingsData, Holding } from "@/lib/parseHoldings";
+import { HoldingsData, parseOptionHolding } from "@/lib/parseHoldings";
 import { fmtMoney } from "@/lib/parseCSV";
 import {
   fetchFullOptionChain,
@@ -19,24 +19,6 @@ function estimateCallPremium(
   const intrinsic = Math.max(currentPrice - strike, 0);
   const otmDiscount = Math.exp(-moneyness * 5);
   return Math.max(intrinsic + timeValue * otmDiscount, 0.01);
-}
-
-function parseOptionHolding(h: Holding) {
-  const m = h.holding.match(/(PUT|CALL)\s+100\s+(\w+)\s+(\S+)\s+(\S+)/);
-  if (!m) return null;
-  return {
-    type: m[1] as "PUT" | "CALL",
-    ticker: m[2],
-    expiry: m[3],
-    strike: parseFloat(m[4]),
-    contracts: Math.abs(h.quantity),
-    isSold: h.quantity < 0,
-    price: h.price,
-    avgCost: h.averageCost,
-    marketValue: h.marketValue,
-    gl: h.gl,
-    glPct: h.glPct,
-  };
 }
 
 export default function HoldingsDashboard({ data }: { data: HoldingsData }) {

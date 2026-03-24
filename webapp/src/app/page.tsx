@@ -10,27 +10,41 @@ import {
 import UploadZone from "@/components/UploadZone";
 import Dashboard from "@/components/Dashboard";
 import HoldingsDashboard from "@/components/HoldingsDashboard";
+import CombinedDashboard from "@/components/CombinedDashboard";
 import TimeframeFilter, {
   TimeframeKey,
   getDateRange,
 } from "@/components/TimeframeFilter";
 
-type RawData =
-  | { type: "activities"; rows: Transaction[]; text: string }
-  | { type: "holdings"; data: HoldingsData; text: string };
-
 export default function Home() {
-  const [raw, setRaw] = useState<RawData | null>(null);
+  const [activitiesText, setActivitiesText] = useState<string | null>(null);
+  const [holdingsText, setHoldingsText] = useState<string | null>(null);
   const [dark, setDark] = useState(true);
   const [timeframe, setTimeframe] = useState<TimeframeKey>("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("portfolio-csv");
-    if (saved) {
-      setRaw(processText(saved));
+    // Load from localStorage, with migration from old key
+    const oldCsv = localStorage.getItem("portfolio-csv");
+    const savedAct = localStorage.getItem("portfolio-csv-activities");
+    const savedHold = localStorage.getItem("portfolio-csv-holdings");
+
+    if (savedAct) setActivitiesText(savedAct);
+    if (savedHold) setHoldingsText(savedHold);
+
+    // Migrate old single key
+    if (oldCsv && !savedAct && !savedHold) {
+      if (isHoldingsCSV(oldCsv)) {
+        localStorage.setItem("portfolio-csv-holdings", oldCsv);
+        setHoldingsText(oldCsv);
+      } else {
+        localStorage.setItem("portfolio-csv-activities", oldCsv);
+        setActivitiesText(oldCsv);
+      }
+      localStorage.removeItem("portfolio-csv");
     }
+
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "light") {
       setDark(false);
@@ -50,40 +64,53 @@ export default function Home() {
     }
   };
 
-  function processText(text: string): RawData {
-    if (isHoldingsCSV(text)) {
-      return { type: "holdings", data: parseHoldings(text), text };
-    }
-    const rows = parseCSV(text);
-    return { type: "activities", rows, text };
-  }
+  const handleFileLoad = (text: string, slot: "activities" | "holdings") => {
+    // Auto-detect and route to correct slot
+    const isHoldings = isHoldingsCSV(text);
+    const actualSlot = isHoldings ? "holdings" : "activities";
 
-  const handleFileLoad = (text: string) => {
-    setRaw(processText(text));
-    setTimeframe("all");
-    setCustomStart("");
-    setCustomEnd("");
+    if (actualSlot === "activities") {
+      localStorage.setItem("portfolio-csv-activities", text);
+      setActivitiesText(text);
+    } else {
+      localStorage.setItem("portfolio-csv-holdings", text);
+      setHoldingsText(text);
+    }
   };
 
   const handleReset = () => {
+    localStorage.removeItem("portfolio-csv-activities");
+    localStorage.removeItem("portfolio-csv-holdings");
     localStorage.removeItem("portfolio-csv");
-    setRaw(null);
+    setActivitiesText(null);
+    setHoldingsText(null);
     setTimeframe("all");
   };
 
-  // For activities: compute date range from data
+  // Parse raw data
+  const activitiesRows: Transaction[] | null = useMemo(
+    () => (activitiesText ? parseCSV(activitiesText) : null),
+    [activitiesText]
+  );
+
+  const holdingsData: HoldingsData | null = useMemo(
+    () => (holdingsText ? parseHoldings(holdingsText) : null),
+    [holdingsText]
+  );
+
+  // Date range for activities
   const dateRange = useMemo(() => {
-    if (!raw || raw.type !== "activities") return { min: "", max: "" };
-    const dates = raw.rows
+    if (!activitiesRows) return { min: "", max: "" };
+    const dates = activitiesRows
       .map((r) => r.Processed)
       .filter(Boolean)
       .sort();
     return { min: dates[0] || "", max: dates[dates.length - 1] || "" };
-  }, [raw]);
+  }, [activitiesRows]);
 
-  // Filter rows and analyze based on timeframe
+  // Filtered activities analysis
   const activitiesData: AnalysisResult | null = useMemo(() => {
-    if (!raw || raw.type !== "activities") return null;
+    if (!activitiesRows) return null;
     const { start, end } = getDateRange(
       timeframe,
       dateRange.min,
@@ -91,31 +118,45 @@ export default function Home() {
       customStart,
       customEnd
     );
-    const filtered = raw.rows.filter((r) => {
+    const filtered = activitiesRows.filter((r) => {
       const d = r.Processed;
       if (!d) return true;
       return d >= start && d <= end;
     });
     return analyze(filtered);
-  }, [raw, timeframe, dateRange, customStart, customEnd]);
+  }, [activitiesRows, timeframe, dateRange, customStart, customEnd]);
+
+  // View mode
+  const viewMode =
+    activitiesData && holdingsData
+      ? "combined"
+      : activitiesData
+      ? "activities"
+      : holdingsData
+      ? "holdings"
+      : "upload";
+
+  const hasAnyData = activitiesText || holdingsText;
 
   return (
     <main className="min-h-screen p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Portfolio Analyzer</h1>
         <div className="flex items-center gap-3">
-          {raw && (
+          {hasAnyData && (
             <>
               <span className="text-xs px-2 py-1 rounded bg-[var(--border)] text-[var(--muted)]">
-                {raw.type === "holdings"
-                  ? "Holdings Snapshot"
-                  : "Activity History"}
+                {viewMode === "combined"
+                  ? "Activities + Holdings"
+                  : viewMode === "activities"
+                  ? "Activity History"
+                  : "Holdings Snapshot"}
               </span>
               <button
                 onClick={handleReset}
                 className="text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
               >
-                Upload new file
+                Reset
               </button>
             </>
           )}
@@ -132,28 +173,52 @@ export default function Home() {
         Options Wheel Strategy Dashboard
       </p>
 
-      {raw ? (
-        raw.type === "activities" && activitiesData ? (
-          <>
-            <TimeframeFilter
-              dateRange={dateRange}
-              selected={timeframe}
-              customStart={customStart}
-              customEnd={customEnd}
-              onSelect={setTimeframe}
-              onCustomChange={(s, e) => {
-                setCustomStart(s);
-                setCustomEnd(e);
-                setTimeframe("custom");
-              }}
-            />
-            <Dashboard data={activitiesData} />
-          </>
-        ) : raw.type === "holdings" ? (
-          <HoldingsDashboard data={raw.data} />
-        ) : null
-      ) : (
-        <UploadZone onFileLoad={handleFileLoad} />
+      {viewMode === "upload" && (
+        <UploadZone
+          onFileLoad={handleFileLoad}
+          activitiesLoaded={false}
+          holdingsLoaded={false}
+        />
+      )}
+
+      {viewMode !== "upload" && !activitiesText && !holdingsText ? null : null}
+
+      {/* Show upload zone for missing file when only one is loaded */}
+      {hasAnyData && viewMode !== "combined" && (
+        <div className="mb-6">
+          <UploadZone
+            onFileLoad={handleFileLoad}
+            activitiesLoaded={!!activitiesText}
+            holdingsLoaded={!!holdingsText}
+          />
+        </div>
+      )}
+
+      {/* Timeframe filter for activities */}
+      {activitiesData && (
+        <TimeframeFilter
+          dateRange={dateRange}
+          selected={timeframe}
+          customStart={customStart}
+          customEnd={customEnd}
+          onSelect={setTimeframe}
+          onCustomChange={(s, e) => {
+            setCustomStart(s);
+            setCustomEnd(e);
+            setTimeframe("custom");
+          }}
+        />
+      )}
+
+      {/* Dashboards */}
+      {viewMode === "combined" && activitiesData && holdingsData && (
+        <CombinedDashboard activities={activitiesData} holdings={holdingsData} />
+      )}
+      {viewMode === "activities" && activitiesData && (
+        <Dashboard data={activitiesData} />
+      )}
+      {viewMode === "holdings" && holdingsData && (
+        <HoldingsDashboard data={holdingsData} />
       )}
     </main>
   );
