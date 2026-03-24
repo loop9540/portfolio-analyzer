@@ -15,180 +15,6 @@ export interface OptionChainData {
   source: "live" | "estimated";
 }
 
-// --- Barchart API ---
-
-interface BarchartSession {
-  cookieHeader: string;
-  xsrfToken: string;
-}
-
-async function getBarchartSession(): Promise<BarchartSession | null> {
-  try {
-    const resp = await fetch(
-      "https://www.barchart.com/stocks/quotes/SPY/options",
-      {
-        headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.timeout(8000),
-        credentials: "include",
-      }
-    );
-    if (!resp.ok) return null;
-
-    const cookies = resp.headers.getSetCookie?.() ?? [];
-    const cookieHeader = cookies
-      .map((c) => c.split(";")[0])
-      .join("; ");
-
-    const xsrfMatch = cookies.find((c) => c.startsWith("XSRF-TOKEN="));
-    if (!xsrfMatch) return null;
-
-    const xsrfToken = decodeURIComponent(
-      xsrfMatch.split("=").slice(1).join("=").split(";")[0]
-    );
-
-    return { cookieHeader, xsrfToken };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchBarchartExpirations(
-  ticker: string,
-  session: BarchartSession
-): Promise<string[]> {
-  try {
-    const resp = await fetch(
-      `https://www.barchart.com/proxies/core-api/v1/options/chain?symbol=${encodeURIComponent(ticker)}&fields=expirationDate&raw=1&type=Call&meta=expirations`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "X-XSRF-TOKEN": session.xsrfToken,
-          Accept: "application/json",
-          Cookie: session.cookieHeader,
-        },
-        signal: AbortSignal.timeout(8000),
-      }
-    );
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return data?.meta?.expirations ?? [];
-  } catch {
-    return [];
-  }
-}
-
-async function fetchBarchartCalls(
-  ticker: string,
-  expiration: string,
-  session: BarchartSession
-): Promise<OptionContract[]> {
-  try {
-    const resp = await fetch(
-      `https://www.barchart.com/proxies/core-api/v1/options/get?underlying=${encodeURIComponent(ticker)}&fields=strikePrice,lastPrice,bidPrice,askPrice,volume,openInterest,volatility,expirationDate&raw=1&type=Call&expiration=${expiration}`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "X-XSRF-TOKEN": session.xsrfToken,
-          Accept: "application/json",
-          Cookie: session.cookieHeader,
-        },
-        signal: AbortSignal.timeout(8000),
-      }
-    );
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    const items: Record<string, unknown>[] = Array.isArray(data?.data)
-      ? data.data
-      : [];
-
-    const expTs = Math.floor(new Date(expiration).getTime() / 1000);
-
-    return items
-      .map((item) => {
-        const r = (item as Record<string, Record<string, number>>).raw ?? item;
-        return {
-          strike: (r as Record<string, number>).strikePrice ?? 0,
-          bid: (r as Record<string, number>).bidPrice ?? 0,
-          ask: (r as Record<string, number>).askPrice ?? 0,
-          lastPrice: (r as Record<string, number>).lastPrice ?? 0,
-          volume: (r as Record<string, number>).volume ?? 0,
-          openInterest: (r as Record<string, number>).openInterest ?? 0,
-          impliedVolatility:
-            ((r as Record<string, number>).volatility ?? 0) / 100,
-          expiration: expTs,
-        };
-      })
-      .filter((c) => c.strike > 0);
-  } catch {
-    return [];
-  }
-}
-
-async function fetchFromBarchart(
-  ticker: string
-): Promise<OptionChainData | null> {
-  const session = await getBarchartSession();
-  if (!session) return null;
-
-  const expirationDates = await fetchBarchartExpirations(ticker, session);
-  if (expirationDates.length === 0) return null;
-
-  const now = Date.now();
-  const targetDtes = [7, 30, 45];
-  const selectedDates: string[] = [];
-
-  for (const targetDte of targetDtes) {
-    const targetMs = now + targetDte * 86400 * 1000;
-    let closest = expirationDates[0];
-    let closestDiff = Math.abs(new Date(closest).getTime() - targetMs);
-
-    for (const exp of expirationDates) {
-      const expMs = new Date(exp).getTime();
-      if (expMs <= now) continue;
-      const diff = Math.abs(expMs - targetMs);
-      if (diff < closestDiff) {
-        closest = exp;
-        closestDiff = diff;
-      }
-    }
-    if (
-      new Date(closest).getTime() > now &&
-      !selectedDates.includes(closest)
-    ) {
-      selectedDates.push(closest);
-    }
-  }
-
-  // Fetch calls for each selected expiration in parallel
-  const results = await Promise.all(
-    selectedDates.map(async (dateStr) => {
-      const calls = await fetchBarchartCalls(ticker, dateStr, session);
-      const expTs = Math.floor(new Date(dateStr).getTime() / 1000);
-      return { expTs, calls };
-    })
-  );
-
-  const expirations: number[] = [];
-  const calls: Record<number, OptionContract[]> = {};
-
-  for (const r of results) {
-    if (r.calls.length > 0) {
-      expirations.push(r.expTs);
-      calls[r.expTs] = r.calls;
-    }
-  }
-
-  if (expirations.length === 0) return null;
-
-  return {
-    expirations: expirations.sort((a, b) => a - b),
-    calls,
-    source: "live",
-  };
-}
-
-// --- Yahoo Finance fallback ---
-
 async function fetchWithProxy(url: string): Promise<Response | null> {
   const proxies = [
     (u: string) =>
@@ -220,7 +46,6 @@ async function fetchFromYahoo(
     const crumb = await crumbResp.text();
     if (!crumb || crumb.includes("error") || crumb.length > 30) return null;
 
-    // Get expirations
     const url = `https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(ticker)}?crumb=${encodeURIComponent(crumb)}`;
     const resp = await fetchWithProxy(url);
     if (!resp) return null;
@@ -232,7 +57,6 @@ async function fetchFromYahoo(
     const allExps: number[] = result.expirationDates || [];
     const now = Math.floor(Date.now() / 1000);
 
-    // Pick expirations for ~7, ~30, ~45 DTE
     const targetDtes = [7, 30, 45];
     const selectedExps: number[] = [];
 
@@ -253,11 +77,9 @@ async function fetchFromYahoo(
       }
     }
 
-    // First fetch already has nearest expiration data
-    const firstExp = allExps.find((e) => e > now);
-    const calls: Record<number, OptionContract[]> = {};
-
-    const parseCalls = (rawCalls: Record<string, number>[]): OptionContract[] =>
+    const parseCalls = (
+      rawCalls: Record<string, number>[]
+    ): OptionContract[] =>
       rawCalls.map((c) => ({
         strike: c.strike ?? 0,
         bid: c.bid ?? 0,
@@ -269,11 +91,12 @@ async function fetchFromYahoo(
         expiration: c.expiration ?? 0,
       }));
 
+    const calls: Record<number, OptionContract[]> = {};
+    const firstExp = allExps.find((e) => e > now);
     if (firstExp && selectedExps.includes(firstExp)) {
       calls[firstExp] = parseCalls(result.options?.[0]?.calls || []);
     }
 
-    // Fetch remaining
     const remaining = selectedExps.filter((e) => !calls[e]);
     const results = await Promise.all(
       remaining.map(async (exp) => {
@@ -304,17 +127,67 @@ async function fetchFromYahoo(
   }
 }
 
-// --- Public API ---
+/**
+ * Get realistic estimated expiration dates (actual Fridays).
+ * Weekly = next Friday, Monthly = 3rd Friday of next month,
+ * 45 DTE = 3rd Friday of month ~45 days out.
+ */
+function getEstimatedExpirations(): number[] {
+  const now = new Date();
+  const exps: number[] = [];
+
+  // Next Friday (weekly)
+  const weekly = new Date(now);
+  weekly.setDate(weekly.getDate() + ((5 - weekly.getDay() + 7) % 7 || 7));
+  weekly.setHours(16, 0, 0, 0);
+  exps.push(Math.floor(weekly.getTime() / 1000));
+
+  // 3rd Friday of next month (~30 DTE)
+  const monthly = getThirdFriday(
+    now.getMonth() + 1 + (now.getDate() > 20 ? 1 : 0),
+    now.getFullYear()
+  );
+  if (monthly > now) {
+    exps.push(Math.floor(monthly.getTime() / 1000));
+  }
+
+  // 3rd Friday ~45 DTE
+  const target45 = new Date(now.getTime() + 45 * 86400000);
+  const far = getThirdFriday(target45.getMonth(), target45.getFullYear());
+  const farTs = Math.floor(far.getTime() / 1000);
+  if (far > now && !exps.includes(farTs)) {
+    exps.push(farTs);
+  }
+
+  return exps.sort((a, b) => a - b);
+}
+
+function getThirdFriday(month: number, year: number): Date {
+  // Handle month overflow
+  if (month > 11) {
+    month -= 12;
+    year++;
+  }
+  const d = new Date(year, month, 1);
+  // Find first Friday
+  const dayOfWeek = d.getDay();
+  const firstFriday = 1 + ((5 - dayOfWeek + 7) % 7);
+  // Third Friday = first Friday + 14
+  d.setDate(firstFriday + 14);
+  d.setHours(16, 0, 0, 0);
+  return d;
+}
 
 export async function fetchFullOptionChain(
   ticker: string
 ): Promise<OptionChainData> {
-  // Try Barchart first, then Yahoo Finance fallback
-  const barchart = await fetchFromBarchart(ticker);
-  if (barchart) return barchart;
-
   const yahoo = await fetchFromYahoo(ticker);
-  if (yahoo) return yahoo;
+  if (yahoo && yahoo.expirations.length > 0) return yahoo;
 
-  return { expirations: [], calls: {}, source: "estimated" };
+  // Return estimated with real Friday dates
+  return {
+    expirations: getEstimatedExpirations(),
+    calls: {},
+    source: "estimated",
+  };
 }
