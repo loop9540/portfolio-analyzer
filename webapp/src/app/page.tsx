@@ -1,24 +1,35 @@
 "use client";
-import { useState, useEffect } from "react";
-import { parseCSV } from "@/lib/parseCSV";
+import { useState, useEffect, useMemo } from "react";
+import { parseCSV, Transaction } from "@/lib/parseCSV";
 import { analyze, AnalysisResult } from "@/lib/analyze";
-import { parseHoldings, isHoldingsCSV, HoldingsData } from "@/lib/parseHoldings";
+import {
+  parseHoldings,
+  isHoldingsCSV,
+  HoldingsData,
+} from "@/lib/parseHoldings";
 import UploadZone from "@/components/UploadZone";
 import Dashboard from "@/components/Dashboard";
 import HoldingsDashboard from "@/components/HoldingsDashboard";
+import TimeframeFilter, {
+  TimeframeKey,
+  getDateRange,
+} from "@/components/TimeframeFilter";
 
-type ViewData =
-  | { type: "activities"; data: AnalysisResult }
-  | { type: "holdings"; data: HoldingsData };
+type RawData =
+  | { type: "activities"; rows: Transaction[]; text: string }
+  | { type: "holdings"; data: HoldingsData; text: string };
 
 export default function Home() {
-  const [view, setView] = useState<ViewData | null>(null);
+  const [raw, setRaw] = useState<RawData | null>(null);
   const [dark, setDark] = useState(true);
+  const [timeframe, setTimeframe] = useState<TimeframeKey>("all");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("portfolio-csv");
     if (saved) {
-      setView(processText(saved));
+      setRaw(processText(saved));
     }
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "light") {
@@ -39,32 +50,66 @@ export default function Home() {
     }
   };
 
-  function processText(text: string): ViewData {
+  function processText(text: string): RawData {
     if (isHoldingsCSV(text)) {
-      return { type: "holdings", data: parseHoldings(text) };
+      return { type: "holdings", data: parseHoldings(text), text };
     }
     const rows = parseCSV(text);
-    return { type: "activities", data: analyze(rows) };
+    return { type: "activities", rows, text };
   }
 
   const handleFileLoad = (text: string) => {
-    setView(processText(text));
+    setRaw(processText(text));
+    setTimeframe("all");
+    setCustomStart("");
+    setCustomEnd("");
   };
 
   const handleReset = () => {
     localStorage.removeItem("portfolio-csv");
-    setView(null);
+    setRaw(null);
+    setTimeframe("all");
   };
+
+  // For activities: compute date range from data
+  const dateRange = useMemo(() => {
+    if (!raw || raw.type !== "activities") return { min: "", max: "" };
+    const dates = raw.rows
+      .map((r) => r.Processed)
+      .filter(Boolean)
+      .sort();
+    return { min: dates[0] || "", max: dates[dates.length - 1] || "" };
+  }, [raw]);
+
+  // Filter rows and analyze based on timeframe
+  const activitiesData: AnalysisResult | null = useMemo(() => {
+    if (!raw || raw.type !== "activities") return null;
+    const { start, end } = getDateRange(
+      timeframe,
+      dateRange.min,
+      dateRange.max,
+      customStart,
+      customEnd
+    );
+    const filtered = raw.rows.filter((r) => {
+      const d = r.Processed;
+      if (!d) return true;
+      return d >= start && d <= end;
+    });
+    return analyze(filtered);
+  }, [raw, timeframe, dateRange, customStart, customEnd]);
 
   return (
     <main className="min-h-screen p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Portfolio Analyzer</h1>
         <div className="flex items-center gap-3">
-          {view && (
+          {raw && (
             <>
               <span className="text-xs px-2 py-1 rounded bg-[var(--border)] text-[var(--muted)]">
-                {view.type === "holdings" ? "Holdings Snapshot" : "Activity History"}
+                {raw.type === "holdings"
+                  ? "Holdings Snapshot"
+                  : "Activity History"}
               </span>
               <button
                 onClick={handleReset}
@@ -87,12 +132,26 @@ export default function Home() {
         Options Wheel Strategy Dashboard
       </p>
 
-      {view ? (
-        view.type === "activities" ? (
-          <Dashboard data={view.data} />
-        ) : (
-          <HoldingsDashboard data={view.data} />
-        )
+      {raw ? (
+        raw.type === "activities" && activitiesData ? (
+          <>
+            <TimeframeFilter
+              dateRange={dateRange}
+              selected={timeframe}
+              customStart={customStart}
+              customEnd={customEnd}
+              onSelect={setTimeframe}
+              onCustomChange={(s, e) => {
+                setCustomStart(s);
+                setCustomEnd(e);
+                setTimeframe("custom");
+              }}
+            />
+            <Dashboard data={activitiesData} />
+          </>
+        ) : raw.type === "holdings" ? (
+          <HoldingsDashboard data={raw.data} />
+        ) : null
       ) : (
         <UploadZone onFileLoad={handleFileLoad} />
       )}
