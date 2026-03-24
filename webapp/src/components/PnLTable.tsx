@@ -404,7 +404,7 @@ function TradeSuggestionPanel({
       };
     });
 
-    return { expLabel, dte, cards };
+    return { expLabel, dte, cards, expTimestamp: exp };
   });
 
   // Recovery estimate using monthly income
@@ -448,10 +448,18 @@ function TradeSuggestionPanel({
       </div>
 
       <div className="space-y-4">
-        {sections.map(({ expLabel, cards }) => (
+        {sections.map(({ expLabel, cards, expTimestamp }) => (
           <div key={expLabel}>
             <div className="text-xs font-medium text-[var(--muted)] mb-2 uppercase tracking-wide">
               {expLabel}
+              <a
+                href={`https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-[var(--accent)] hover:underline normal-case tracking-normal"
+              >
+                View chain
+              </a>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {cards.map((c, i) => (
@@ -460,9 +468,14 @@ function TradeSuggestionPanel({
                   className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-3"
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-semibold">
-                      ${c.strike.toFixed(1)} Call
-                    </span>
+                    <a
+                      href={`https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}&strike=${c.strike}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold hover:text-[var(--accent)] transition-colors"
+                    >
+                      ${c.strike.toFixed(1)} Call &#8599;
+                    </a>
                     <span
                       className={`text-xs px-2 py-0.5 rounded ${
                         c.isLivePrice
