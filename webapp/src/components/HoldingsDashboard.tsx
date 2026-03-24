@@ -103,7 +103,7 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
             </div>
             <div
               className={`text-xl font-bold tabular-nums ${
-                k.positive ? "text-green-500" : "text-red-500"
+                k.positive ? "text-[var(--green)]" : "text-[var(--red)]"
               }`}
             >
               {k.value}
@@ -177,14 +177,14 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
                       </td>
                       <td
                         className={`text-right tabular-nums p-2 border-b border-[var(--border)] ${
-                          e.gl >= 0 ? "text-green-500" : "text-red-500"
+                          e.gl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                         }`}
                       >
                         {fmtMoney(e.gl)}
                       </td>
                       <td
                         className={`text-right tabular-nums p-2 border-b border-[var(--border)] ${
-                          e.glPct >= 0 ? "text-green-500" : "text-red-500"
+                          e.glPct >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                         }`}
                       >
                         {e.glPct.toFixed(1)}%
@@ -198,8 +198,8 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
                           }
                           className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                             expandedTicker === e.symbol
-                              ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                              : "bg-[var(--border)] text-[var(--text)] hover:bg-purple-500/20 hover:text-purple-400"
+                              ? "bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/30"
+                              : "bg-[var(--border)] text-[var(--text)] hover:bg-[var(--accent)]/20 hover:text-[var(--accent)]"
                           }`}
                         >
                           Trade Suggest
@@ -240,7 +240,7 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
                 </td>
                 <td
                   className={`text-right tabular-nums p-2 ${
-                    totalEquityGL >= 0 ? "text-green-500" : "text-red-500"
+                    totalEquityGL >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                   }`}
                 >
                   {fmtMoney(totalEquityGL)}
@@ -272,7 +272,7 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
                     <span className="ticker-badge">{p.ticker}</span>
                     <span
                       className={`text-xs font-semibold ${
-                        p.gl >= 0 ? "text-green-500" : "text-red-500"
+                        p.gl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                       }`}
                     >
                       {fmtMoney(p.gl)} ({p.glPct > 0 ? "+" : ""}
@@ -310,7 +310,7 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
                     <span className="ticker-badge">{c.ticker}</span>
                     <span
                       className={`text-xs font-semibold ${
-                        c.gl >= 0 ? "text-green-500" : "text-red-500"
+                        c.gl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                       }`}
                     >
                       {fmtMoney(c.gl)} ({c.glPct > 0 ? "+" : ""}
@@ -371,7 +371,7 @@ export default function HoldingsDashboard({ data }: { data: HoldingsData }) {
                   </td>
                   <td
                     className={`text-right tabular-nums p-2 border-b border-[var(--border)] ${
-                      t.gl >= 0 ? "text-green-500" : "text-red-500"
+                      t.gl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                     }`}
                   >
                     {fmtMoney(t.gl)}
@@ -412,7 +412,7 @@ function HoldingTradeSuggest({
 
   if (loadingChain && !chainData) {
     return (
-      <div className="bg-purple-500/5 border-t border-purple-500/20 p-4">
+      <div className="bg-[var(--accent)]/5 border-t border-[var(--accent)]/20 p-4">
         <p className="text-sm text-[var(--muted)]">
           Loading option chain for {ticker}...
         </p>
@@ -422,7 +422,7 @@ function HoldingTradeSuggest({
 
   if (contracts === 0) {
     return (
-      <div className="bg-purple-500/5 border-t border-purple-500/20 p-4">
+      <div className="bg-[var(--accent)]/5 border-t border-[var(--accent)]/20 p-4">
         <p className="text-sm text-[var(--muted)]">
           Less than 100 shares — cannot sell covered calls.
         </p>
@@ -526,17 +526,17 @@ function HoldingTradeSuggest({
       : null;
 
   return (
-    <div className="bg-purple-500/5 border-t border-purple-500/20 p-4">
+    <div className="bg-[var(--accent)]/5 border-t border-[var(--accent)]/20 p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-purple-400">
+          <h3 className="text-sm font-semibold text-[var(--accent)]">
             Covered Call Suggestions — {ticker}
           </h3>
           <span
             className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
               isLive
-                ? "bg-green-500/20 text-green-400"
-                : "bg-yellow-500/20 text-yellow-400"
+                ? "bg-[var(--green)]/20 text-[var(--green)]"
+                : "bg-[color:orange]/20 text-[color:orange]"
             }`}
           >
             {isLive ? "LIVE" : "ESTIMATED"}
@@ -549,7 +549,7 @@ function HoldingTradeSuggest({
           <span>Current: ${currentPrice.toFixed(2)}</span>
           <span>Cost: ${avgCost.toFixed(2)}</span>
           {recoveryMonths != null && unrealizedLoss > 0 && (
-            <span className="text-yellow-400">
+            <span className="text-[color:orange]">
               Est. {recoveryMonths} month{recoveryMonths !== 1 ? "s" : ""} to
               recover {fmtMoney(unrealizedLoss)}
             </span>
@@ -576,8 +576,8 @@ function HoldingTradeSuggest({
                     <span
                       className={`text-xs px-2 py-0.5 rounded ${
                         c.isLivePrice
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-purple-500/20 text-purple-400"
+                          ? "bg-[var(--green)]/20 text-[var(--green)]"
+                          : "bg-[var(--accent)]/20 text-[var(--accent)]"
                       }`}
                     >
                       {c.isLivePrice ? "" : "~"}${c.premium.toFixed(2)}
@@ -609,18 +609,18 @@ function HoldingTradeSuggest({
                     <span className="text-[var(--muted)]">
                       {contracts}x contracts
                     </span>
-                    <span className="text-green-500 font-semibold">
+                    <span className="text-[var(--green)] font-semibold">
                       {fmtMoney(c.totalIncome)}
                     </span>
                   </div>
                   {c.strike < avgCost && (
-                    <div className="text-xs text-yellow-400 mt-1">
+                    <div className="text-xs text-[color:orange] mt-1">
                       Below cost basis — assignment locks in loss of{" "}
                       {fmtMoney((avgCost - c.strike) * contracts * 100)}
                     </div>
                   )}
                   {c.strike >= avgCost && (
-                    <div className="text-xs text-green-400 mt-1">
+                    <div className="text-xs text-[var(--green)] mt-1">
                       If called: exit at{" "}
                       {fmtMoney(
                         (c.strike - avgCost) * contracts * 100 + c.totalIncome

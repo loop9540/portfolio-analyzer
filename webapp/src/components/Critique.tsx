@@ -281,19 +281,19 @@ const ICONS = {
 
 const COLORS = {
   positive: {
-    border: "border-green-500/30",
-    bg: "bg-green-500/10",
-    icon: "text-green-500 bg-green-500/20",
+    border: "border-[var(--green)]/30",
+    bg: "bg-[var(--green)]/10",
+    icon: "text-[var(--green)] bg-[var(--green)]/20",
   },
   warning: {
-    border: "border-yellow-500/30",
-    bg: "bg-yellow-500/10",
-    icon: "text-yellow-500 bg-yellow-500/20",
+    border: "border-[color:orange]/30",
+    bg: "bg-[color:orange]/10",
+    icon: "text-[color:orange] bg-[color:orange]/20",
   },
   suggestion: {
-    border: "border-blue-500/30",
-    bg: "bg-blue-500/10",
-    icon: "text-blue-500 bg-blue-500/20",
+    border: "border-[var(--accent)]/30",
+    bg: "bg-[var(--accent)]/10",
+    icon: "text-[var(--accent)] bg-[var(--accent)]/20",
   },
 };
 
@@ -346,13 +346,13 @@ export default function Critique({ data }: { data: AnalysisResult }) {
               key={i}
               className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4"
             >
-              <h3 className="text-sm font-semibold text-purple-400 mb-3">
+              <h3 className="text-sm font-semibold text-[var(--accent)] mb-3">
                 {opt.category}
               </h3>
               <ul className="space-y-2">
                 {opt.actions.map((action, j) => (
                   <li key={j} className="flex items-start gap-2 text-sm">
-                    <span className="text-purple-400 mt-0.5 flex-shrink-0">
+                    <span className="text-[var(--accent)] mt-0.5 flex-shrink-0">
                       &bull;
                     </span>
                     <span className="text-[var(--muted)] leading-relaxed">

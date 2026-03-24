@@ -35,7 +35,7 @@ export default function KPIRow({ data }: { data: AnalysisResult }) {
           </div>
           <div
             className={`text-xl font-bold tabular-nums ${
-              k.positive ? "text-green-500" : "text-red-500"
+              k.positive ? "text-[var(--green)]" : "text-[var(--red)]"
             }`}
           >
             {k.value}

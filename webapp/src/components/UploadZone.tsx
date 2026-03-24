@@ -25,11 +25,11 @@ export default function UploadZone({ onFileLoad }: Props) {
 
   return (
     <div
-      className="border-2 border-dashed border-[var(--border)] rounded-xl p-12 text-center cursor-pointer hover:border-blue-500 transition-colors"
+      className="border-2 border-dashed border-[var(--border)] rounded-xl p-12 text-center cursor-pointer hover:border-[var(--accent)] transition-colors"
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => {
         e.preventDefault();
-        e.currentTarget.style.borderColor = "#3b82f6";
+        e.currentTarget.style.borderColor = "var(--accent)";
       }}
       onDragLeave={(e) => {
         e.currentTarget.style.borderColor = "";

@@ -1,23 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0f1117;
-  --card: #1a1d27;
-  --border: #2a2d3a;
-  --text: #e1e4ea;
-  --muted: #8b8fa3;
-  --background: #0f1117;
-  --foreground: #e1e4ea;
+  --bg: #101518;
+  --card: #1D2228;
+  --border: #374151;
+  --text: #F0F3F5;
+  --muted: #979EA8;
+  --accent: #7D2EFF;
+  --accent-hover: #9d61ff;
+  --green: #008751;
+  --red: #EB0F29;
+  --background: #101518;
+  --foreground: #F0F3F5;
 }
 
 [data-theme="light"] {
-  --bg: #f5f5f7;
-  --card: #ffffff;
-  --border: #e0e0e6;
-  --text: #1a1a2e;
-  --muted: #6b7084;
-  --background: #f5f5f7;
-  --foreground: #1a1a2e;
+  --bg: #F5F8FA;
+  --card: #FFFFFF;
+  --border: #D8DADE;
+  --text: #232A31;
+  --muted: #5B636A;
+  --accent: #6001D2;
+  --accent-hover: #5409B2;
+  --green: #008751;
+  --red: #EB0F29;
+  --background: #F5F8FA;
+  --foreground: #232A31;
 }
 
 @theme inline {
@@ -53,6 +61,11 @@ body {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Yahoo Finance inspired colors */
+.yf-green { color: var(--green); }
+.yf-red { color: var(--red); }
+.yf-accent { color: var(--accent); }
 
 /* Scrollbar */
 ::-webkit-scrollbar {

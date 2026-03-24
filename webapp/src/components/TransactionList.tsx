@@ -63,9 +63,9 @@ export default function TransactionList({
               <span
                 className={`font-semibold tabular-nums ${
                   amt > 0
-                    ? "text-green-500"
+                    ? "text-[var(--green)]"
                     : amt < 0
-                    ? "text-red-500"
+                    ? "text-[var(--red)]"
                     : ""
                 }`}
               >

@@ -30,15 +30,15 @@ export default function PremiumTable({
                 <td className="p-2 border-b border-[var(--border)]">
                   <span className="ticker-badge">{e.ticker}</span>
                 </td>
-                <td className="text-right tabular-nums text-green-500 p-2 border-b border-[var(--border)]">
+                <td className="text-right tabular-nums text-[var(--green)] p-2 border-b border-[var(--border)]">
                   {fmtMoney(e.sold)}
                 </td>
-                <td className="text-right tabular-nums text-red-500 p-2 border-b border-[var(--border)]">
+                <td className="text-right tabular-nums text-[var(--red)] p-2 border-b border-[var(--border)]">
                   {fmtMoney(-e.bought)}
                 </td>
                 <td
                   className={`text-right tabular-nums p-2 border-b border-[var(--border)] ${
-                    e.net >= 0 ? "text-green-500" : "text-red-500"
+                    e.net >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"
                   }`}
                 >
                   {fmtMoney(e.net)}
@@ -47,13 +47,13 @@ export default function PremiumTable({
             ))}
             <tr className="font-bold border-t-2 border-[var(--border)]">
               <td className="p-2">TOTAL</td>
-              <td className="text-right tabular-nums text-green-500 p-2">
+              <td className="text-right tabular-nums text-[var(--green)] p-2">
                 {fmtMoney(totalSold)}
               </td>
-              <td className="text-right tabular-nums text-red-500 p-2">
+              <td className="text-right tabular-nums text-[var(--red)] p-2">
                 {fmtMoney(-totalBought)}
               </td>
-              <td className="text-right tabular-nums text-green-500 p-2">
+              <td className="text-right tabular-nums text-[var(--green)] p-2">
                 {fmtMoney(totalNet)}
               </td>
             </tr>
