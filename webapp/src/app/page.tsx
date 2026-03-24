@@ -13,13 +13,31 @@ type ViewData =
 
 export default function Home() {
   const [view, setView] = useState<ViewData | null>(null);
+  const [dark, setDark] = useState(true);
 
   useEffect(() => {
     const saved = localStorage.getItem("portfolio-csv");
     if (saved) {
       setView(processText(saved));
     }
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light") {
+      setDark(false);
+      document.documentElement.setAttribute("data-theme", "light");
+    }
   }, []);
+
+  const toggleTheme = () => {
+    const next = !dark;
+    setDark(next);
+    if (next) {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.setAttribute("data-theme", "light");
+      localStorage.setItem("theme", "light");
+    }
+  };
 
   function processText(text: string): ViewData {
     if (isHoldingsCSV(text)) {
@@ -42,19 +60,28 @@ export default function Home() {
     <main className="min-h-screen p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Portfolio Analyzer</h1>
-        {view && (
-          <div className="flex items-center gap-3">
-            <span className="text-xs px-2 py-1 rounded bg-[var(--border)] text-[var(--muted)]">
-              {view.type === "holdings" ? "Holdings Snapshot" : "Activity History"}
-            </span>
-            <button
-              onClick={handleReset}
-              className="text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
-            >
-              Upload new file
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {view && (
+            <>
+              <span className="text-xs px-2 py-1 rounded bg-[var(--border)] text-[var(--muted)]">
+                {view.type === "holdings" ? "Holdings Snapshot" : "Activity History"}
+              </span>
+              <button
+                onClick={handleReset}
+                className="text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+              >
+                Upload new file
+              </button>
+            </>
+          )}
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full bg-[var(--border)] flex items-center justify-center text-sm hover:opacity-80 transition-opacity"
+            title={dark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {dark ? "\u2600\uFE0F" : "\uD83C\uDF19"}
+          </button>
+        </div>
       </div>
       <p className="text-[var(--muted)] text-sm mb-6">
         Options Wheel Strategy Dashboard
