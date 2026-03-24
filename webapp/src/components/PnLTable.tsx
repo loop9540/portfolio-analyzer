@@ -6,6 +6,7 @@ import {
   fetchFullOptionChain,
   OptionChainData,
   OptionContract,
+  getEstimatedExpirations,
 } from "@/lib/optionChain";
 import { snapStrike, findLiveMatch } from "@/lib/strikeSnap";
 
@@ -323,7 +324,7 @@ function TradeSuggestionPanel({
   const expirations = isLive
     ? chainData.expirations
     : // Fallback: generate synthetic expirations
-      [7, 30, 45].map((d) => Math.floor(now) + d * 86400);
+      getEstimatedExpirations();
 
   // For each expiration, find relevant strikes near currentPrice and avgCost
   const sections = expirations.map((exp) => {

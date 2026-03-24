@@ -132,7 +132,7 @@ async function fetchFromYahoo(
  * Weekly = next Friday, Monthly = 3rd Friday of next month,
  * 45 DTE = 3rd Friday of month ~45 days out.
  */
-function getEstimatedExpirations(): number[] {
+export function getEstimatedExpirations(): number[] {
   const now = new Date();
   const exps: number[] = [];
 

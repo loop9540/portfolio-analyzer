@@ -6,6 +6,7 @@ import {
   fetchFullOptionChain,
   OptionChainData,
   OptionContract,
+  getEstimatedExpirations,
 } from "@/lib/optionChain";
 import { snapStrike, findLiveMatch } from "@/lib/strikeSnap";
 
@@ -421,7 +422,7 @@ function HoldingTradeSuggest({
   const now = Date.now() / 1000;
   const expirations = isLive
     ? chainData.expirations
-    : [7, 30, 45].map((d) => Math.floor(now) + d * 86400);
+    : getEstimatedExpirations();
 
   const sections = expirations.map((exp) => {
     const dte = Math.max(Math.round((exp - now) / 86400), 1);
