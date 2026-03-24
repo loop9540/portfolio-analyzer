@@ -512,7 +512,8 @@ function HoldingTradeSuggest({
       };
     });
 
-    return { expLabel, dte, cards, expTimestamp: exp };
+    const isRealExp = isLive && chainData.expirations.includes(exp);
+    return { expLabel, dte, cards, expTimestamp: exp, isRealExp };
   });
 
   const monthlySection = sections.find((s) => s.dte >= 25 && s.dte <= 40);
@@ -558,17 +559,21 @@ function HoldingTradeSuggest({
       </div>
 
       <div className="space-y-4">
-        {sections.map(({ expLabel, cards, expTimestamp }) => (
+        {sections.map(({ expLabel, cards, expTimestamp, isRealExp }) => {
+          const chainUrl = isRealExp
+            ? `https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}`
+            : `https://finance.yahoo.com/quote/${ticker}/options/`;
+          return (
           <div key={expLabel}>
             <div className="text-xs font-medium text-[var(--muted)] mb-2 uppercase tracking-wide">
               {expLabel}
               <a
-                href={`https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}`}
+                href={chainUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 text-[var(--accent)] hover:underline normal-case tracking-normal"
               >
-                View chain
+                View chain &#8599;
               </a>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -579,7 +584,7 @@ function HoldingTradeSuggest({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <a
-                      href={`https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}&strike=${c.strike}`}
+                      href={chainUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm font-semibold hover:text-[var(--accent)] transition-colors"
@@ -645,7 +650,8 @@ function HoldingTradeSuggest({
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

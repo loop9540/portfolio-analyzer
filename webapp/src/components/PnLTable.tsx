@@ -404,7 +404,9 @@ function TradeSuggestionPanel({
       };
     });
 
-    return { expLabel, dte, cards, expTimestamp: exp };
+    // Only use real expiration timestamps for links (not synthetic ones)
+    const isRealExp = isLive && chainData.expirations.includes(exp);
+    return { expLabel, dte, cards, expTimestamp: exp, isRealExp };
   });
 
   // Recovery estimate using monthly income
@@ -448,17 +450,21 @@ function TradeSuggestionPanel({
       </div>
 
       <div className="space-y-4">
-        {sections.map(({ expLabel, cards, expTimestamp }) => (
+        {sections.map(({ expLabel, cards, expTimestamp, isRealExp }) => {
+          const chainUrl = isRealExp
+            ? `https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}`
+            : `https://finance.yahoo.com/quote/${ticker}/options/`;
+          return (
           <div key={expLabel}>
             <div className="text-xs font-medium text-[var(--muted)] mb-2 uppercase tracking-wide">
               {expLabel}
               <a
-                href={`https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}`}
+                href={chainUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-2 text-[var(--accent)] hover:underline normal-case tracking-normal"
               >
-                View chain
+                View chain &#8599;
               </a>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -469,7 +475,7 @@ function TradeSuggestionPanel({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <a
-                      href={`https://finance.yahoo.com/quote/${ticker}/options/?date=${expTimestamp}&strike=${c.strike}`}
+                      href={chainUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm font-semibold hover:text-[var(--accent)] transition-colors"
@@ -535,7 +541,8 @@ function TradeSuggestionPanel({
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
