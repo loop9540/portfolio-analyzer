@@ -109,13 +109,18 @@ export function analyzeCombined(
     });
   }
 
-  // Add tickers from activities that aren't in holdings (fully exited positions)
+  // Add tickers from activities that aren't in holdings equities
   for (const [ticker, prem] of Object.entries(activities.premiumByTicker)) {
     if (!tickerMap.has(ticker)) {
       const netPremium = prem.sold - prem.bought;
+      const opts = openOptions[ticker];
+      const hasOpenPut = !!opts?.puts.length;
+      const hasOpenCall = !!opts?.calls.length;
+      // If there's an open option, it's an active position, not exited
+      const isActive = hasOpenPut || hasOpenCall;
       tickerMap.set(ticker, {
         ticker,
-        holding: `${ticker} (exited)`,
+        holding: isActive ? `${ticker} (options only)` : `${ticker} (exited)`,
         currentShares: 0,
         currentPrice: 0,
         avgCost: 0,
@@ -125,10 +130,14 @@ export function analyzeCombined(
         premiumCollected: netPremium,
         truePnL: netPremium,
         truePnLPct: 0,
-        hasOpenCall: false,
-        openCallDetails: null,
-        hasOpenPut: false,
-        openPutDetails: null,
+        hasOpenCall,
+        openCallDetails: hasOpenCall
+          ? opts!.calls.map((c) => `${c!.contracts}x $${c!.strike} ${c!.expiry}`).join(", ")
+          : null,
+        hasOpenPut,
+        openPutDetails: hasOpenPut
+          ? opts!.puts.map((p) => `${p!.contracts}x $${p!.strike} ${p!.expiry}`).join(", ")
+          : null,
         canSellCalls: false,
       });
     }

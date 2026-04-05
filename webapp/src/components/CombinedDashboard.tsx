@@ -144,7 +144,12 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
                     <tr key={t.ticker}>
                       <td className="p-2 border-b border-[var(--border)]">
                         <span className="ticker-badge">{t.ticker}</span>
-                        {t.currentShares === 0 && (
+                        {t.currentShares === 0 && t.hasOpenPut && (
+                          <span className="text-[10px] text-[var(--muted)] ml-1">
+                            puts open
+                          </span>
+                        )}
+                        {t.currentShares === 0 && !t.hasOpenPut && !t.hasOpenCall && (
                           <span className="text-[10px] text-[var(--muted)] ml-1">
                             exited
                           </span>
@@ -213,7 +218,12 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
                         ) : null}
                         {t.hasOpenCall && (
                           <div className="text-[10px] text-[var(--muted)] mt-0.5">
-                            {t.openCallDetails}
+                            C: {t.openCallDetails}
+                          </div>
+                        )}
+                        {t.hasOpenPut && (
+                          <div className="text-[10px] text-[var(--muted)] mt-0.5">
+                            P: {t.openPutDetails}
                           </div>
                         )}
                       </td>
