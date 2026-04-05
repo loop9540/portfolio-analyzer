@@ -42,6 +42,17 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
 
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
+  // Build set of tickers with open positions (shares or options)
+  const openTickers = useMemo(() => {
+    const s = new Set<string>();
+    for (const eq of holdings.equities) s.add(eq.symbol.trim().toUpperCase());
+    for (const opt of holdings.options) {
+      const m = opt.holding.match(/(?:PUT|CALL)\s+100\s+(\w+)/);
+      if (m) s.add(m[1]);
+    }
+    return s;
+  }, [holdings]);
+
   return (
     <div>
       {/* KPIs */}
@@ -329,7 +340,7 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
       {/* Premium Chart + Table */}
       <PremiumChart entries={activities.premiumEntries} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-        <PremiumTable entries={activities.premiumEntries} />
+        <PremiumTable entries={activities.premiumEntries} openTickers={openTickers} />
         <div className="card p-5">
           <h2 className="text-base font-semibold mb-4">Put Exposure</h2>
           <div className="text-2xl font-bold text-[var(--red)] mb-3">
