@@ -338,7 +338,7 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
       </div>
 
       {/* Premium Chart + Table */}
-      <PremiumChart entries={activities.premiumEntries} />
+      <PremiumChart entries={activities.premiumEntries} openTickers={openTickers} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
         <PremiumTable entries={activities.premiumEntries} openTickers={openTickers} />
         <div className="card p-5">
