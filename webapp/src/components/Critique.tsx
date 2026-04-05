@@ -64,18 +64,39 @@ function generateInsights(data: AnalysisResult, holdings?: HoldingsData): Insigh
     });
   }
 
-  // 4. Assignment analysis
+  // 4. Assignment analysis — check which are already covered
   const assignedTickers = [...new Set(assignmentDetails.map((a) => a.ticker))];
   if (assignedTickers.length > 0) {
+    const coveredSet = new Set<string>();
+    if (holdings) {
+      for (const opt of holdings.options) {
+        const m = opt.holding.match(/CALL\s+100\s+(\w+)/);
+        if (m && opt.quantity < 0) coveredSet.add(m[1]);
+      }
+    }
+    const uncovered = assignedTickers.filter((t) => !coveredSet.has(t));
+    const covered = assignedTickers.filter((t) => coveredSet.has(t));
     const totalAssignedCost = assignmentDetails.reduce(
       (s, a) => s + a.cost,
       0
     );
-    insights.push({
-      type: "suggestion",
-      title: `${assignedTickers.length} ticker${assignedTickers.length > 1 ? "s" : ""} assigned — ${fmtMoney(totalAssignedCost)} capital tied up`,
-      detail: `Assigned positions in ${assignedTickers.join(", ")} are locking up capital. Sell covered calls against these to generate additional income while waiting for recovery. Target strikes at or above your cost basis.`,
-    });
+
+    if (uncovered.length > 0) {
+      const uncoveredCost = assignmentDetails
+        .filter((a) => uncovered.includes(a.ticker))
+        .reduce((s, a) => s + a.cost, 0);
+      insights.push({
+        type: "suggestion",
+        title: `${uncovered.length} assigned position${uncovered.length > 1 ? "s" : ""} without covered calls — ${fmtMoney(uncoveredCost)} capital idle`,
+        detail: `${uncovered.join(", ")} have no calls sold against them. Sell covered calls to generate income while waiting for recovery.${covered.length > 0 ? ` (${covered.join(", ")} are already covered.)` : ""}`,
+      });
+    } else if (covered.length > 0) {
+      insights.push({
+        type: "positive",
+        title: `All ${covered.length} assigned positions are covered`,
+        detail: `${covered.join(", ")} all have covered calls written. Total assigned capital: ${fmtMoney(totalAssignedCost)}.`,
+      });
+    }
   }
 
   // 5. Fee drag
@@ -175,7 +196,7 @@ interface Optimization {
   actions: string[];
 }
 
-function generateOptimizations(data: AnalysisResult): Optimization[] {
+function generateOptimizations(data: AnalysisResult, holdings?: HoldingsData): Optimization[] {
   const {
     premiumEntries,
     totalSold,
@@ -194,15 +215,42 @@ function generateOptimizations(data: AnalysisResult): Optimization[] {
   const assignedTickers = [...new Set(assignmentDetails.map((a) => a.ticker))];
   const optionTrades = transactions.filter((t) => t._category === "options");
 
+  // Determine which tickers already have covered calls from holdings
+  const coveredTickers = new Set<string>();
+  if (holdings) {
+    for (const opt of holdings.options) {
+      const m = opt.holding.match(/CALL\s+100\s+(\w+)/);
+      if (m && opt.quantity < 0) coveredTickers.add(m[1]);
+    }
+  }
+
   // Capital efficiency
   const capitalActions: string[] = [];
   const totalAssignedCost = assignmentDetails.reduce((s, a) => s + a.cost, 0);
-  if (assignedTickers.length > 0) {
+
+  // Filter to only uncovered assigned positions
+  const uncoveredAssigned = assignedTickers.filter((t) => !coveredTickers.has(t));
+  const alreadyCovered = assignedTickers.filter((t) => coveredTickers.has(t));
+
+  if (uncoveredAssigned.length > 0) {
+    const uncoveredCost = assignmentDetails
+      .filter((a) => uncoveredAssigned.includes(a.ticker))
+      .reduce((s, a) => s + a.cost, 0);
     capitalActions.push(
-      `Sell covered calls on assigned positions (${assignedTickers.join(", ")}) to generate ${fmtMoney(totalAssignedCost * 0.02)}–${fmtMoney(totalAssignedCost * 0.04)}/month in additional premium`
+      `Sell covered calls on uncovered positions (${uncoveredAssigned.join(", ")}) to generate ${fmtMoney(uncoveredCost * 0.02)}–${fmtMoney(uncoveredCost * 0.04)}/month in additional premium`
     );
     capitalActions.push(
       "Set call strikes at or above cost basis to avoid locking in losses on assignment"
+    );
+  }
+  if (alreadyCovered.length > 0) {
+    capitalActions.push(
+      `${alreadyCovered.join(", ")} already have covered calls — monitor for roll opportunities as expiration approaches`
+    );
+  }
+  if (uncoveredAssigned.length === 0 && assignedTickers.length > 0) {
+    capitalActions.push(
+      "All assigned positions are covered — well done. Focus on rolling existing calls for additional credit when profitable"
     );
   }
   capitalActions.push(
@@ -334,7 +382,7 @@ const COLORS = {
 
 export default function Critique({ data, holdings }: { data: AnalysisResult; holdings?: HoldingsData }) {
   const insights = generateInsights(data, holdings);
-  const optimizations = generateOptimizations(data);
+  const optimizations = generateOptimizations(data, holdings);
 
   return (
     <div className="space-y-6 mb-6">
