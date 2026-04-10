@@ -5,64 +5,72 @@ import { fmtMoney } from "@/lib/parseCSV";
 interface Props {
   bookValue: number;
   marketValue: number;
-  netIncome: number; // premium + dividends - fees
+  netIncome: number;
   unrealizedGL: number;
-  startDate: string; // earliest transaction date (YYYY-MM-DD)
+  startDate: string;
+}
+
+async function fetchYahooChart(url: string): Promise<Record<string, unknown> | null> {
+  // Try multiple proxy strategies
+  const attempts: (() => Promise<Response>)[] = [
+    // allorigins /get wrapper (returns {contents: "json string"})
+    () =>
+      fetch(
+        `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        { signal: AbortSignal.timeout(10000) }
+      ),
+    // allorigins /raw
+    () =>
+      fetch(
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        { signal: AbortSignal.timeout(10000) }
+      ),
+    // corsproxy
+    () =>
+      fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, {
+        signal: AbortSignal.timeout(10000),
+      }),
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const resp = await attempt();
+      if (!resp.ok) continue;
+      const raw = await resp.json();
+      // allorigins /get wraps in {contents: "..."}
+      if (raw.contents) {
+        return JSON.parse(raw.contents);
+      }
+      return raw;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
 }
 
 async function fetchSPYPrice(
   period1: number,
   period2: number
 ): Promise<number | null> {
-  const proxies = [
-    (url: string) =>
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  ];
-
-  const baseUrl = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=${period1}&period2=${period2}&interval=1d`;
-
-  for (const proxyFn of proxies) {
-    try {
-      const resp = await fetch(proxyFn(baseUrl), {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      const closes =
-        data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-      const validCloses = closes.filter((c: number | null) => c != null);
-      return validCloses.length > 0 ? validCloses[0] : null;
-    } catch {
-      /* try next */
-    }
-  }
-  return null;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=${period1}&period2=${period2}&interval=1d`;
+  const data = await fetchYahooChart(url);
+  if (!data) return null;
+  const closes =
+    (data as Record<string, unknown> & { chart?: { result?: { indicators?: { quote?: { close?: number[] }[] } }[] } })
+      ?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
+  const validCloses = (closes as (number | null)[]).filter((c) => c != null);
+  return validCloses.length > 0 ? validCloses[0] : null;
 }
 
 async function fetchSPYCurrent(): Promise<number | null> {
-  const proxies = [
-    (url: string) =>
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  ];
-
-  const baseUrl =
-    "https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=1d";
-
-  for (const proxyFn of proxies) {
-    try {
-      const resp = await fetch(proxyFn(baseUrl), {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
-    } catch {
-      /* try next */
-    }
-  }
-  return null;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=1d`;
+  const data = await fetchYahooChart(url);
+  if (!data) return null;
+  return (
+    (data as Record<string, unknown> & { chart?: { result?: { meta?: { regularMarketPrice?: number } }[] } })
+      ?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null
+  );
 }
 
 export default function Benchmark({
@@ -79,7 +87,7 @@ export default function Benchmark({
   useEffect(() => {
     const fetchData = async () => {
       const startTs = Math.floor(new Date(startDate).getTime() / 1000);
-      const endTs = startTs + 5 * 86400; // window for first trading day
+      const endTs = startTs + 5 * 86400;
 
       const [start, current] = await Promise.all([
         fetchSPYPrice(startTs, endTs),
@@ -199,8 +207,9 @@ export default function Benchmark({
                           : "text-[var(--red)]"
                       }`}
                     >
-                      {fmtMoney(spyReturnDollars!)} (+{spyReturnPct.toFixed(1)}
-                      %)
+                      {fmtMoney(spyReturnDollars!)} (
+                      {spyReturnPct >= 0 ? "+" : ""}
+                      {spyReturnPct.toFixed(1)}%)
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-[var(--muted)]">
@@ -236,10 +245,10 @@ export default function Benchmark({
                 {fmtMoney(Math.abs(diff))}
               </div>
               <div className="text-sm text-[var(--muted)] mt-1">
-                {totalReturnPct.toFixed(1)}% vs {spyReturnPct?.toFixed(1)}% over{" "}
-                {Math.round(months)} months
+                {totalReturnPct.toFixed(1)}% vs {spyReturnPct?.toFixed(1)}%
+                over {Math.round(months)} months
                 {!isAhead &&
-                  " — the wheel strategy underperforms in strong bull markets where upside is capped by sold calls"}
+                  " — note: ~50% of capital is in T-Bills, not fully deployed in equities"}
                 {isAhead &&
                   " — premium income is adding real alpha on top of market returns"}
               </div>
