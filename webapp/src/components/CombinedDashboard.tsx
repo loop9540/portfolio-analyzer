@@ -8,6 +8,7 @@ import PremiumChart from "./PremiumChart";
 import PremiumTable from "./PremiumTable";
 import TransactionList from "./TransactionList";
 import Critique from "./Critique";
+import Benchmark from "./Benchmark";
 import {
   fetchFullOptionChain,
   OptionChainData,
@@ -110,6 +111,20 @@ export default function CombinedDashboard({ activities, holdings }: Props) {
           </div>
         ))}
       </div>
+
+      {/* Benchmark vs S&P 500 */}
+      <Benchmark
+        bookValue={combined.totalPortfolioValue - combined.totalUnrealizedGL}
+        marketValue={combined.totalPortfolioValue}
+        netIncome={combined.totalNetIncome}
+        unrealizedGL={combined.totalUnrealizedGL}
+        startDate={
+          activities.transactions
+            .map((t) => t.Processed)
+            .filter(Boolean)
+            .sort()[0] || ""
+        }
+      />
 
       {/* True P&L Table */}
       <div className="card p-5 mb-6">
