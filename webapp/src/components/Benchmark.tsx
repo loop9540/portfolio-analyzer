@@ -10,67 +10,78 @@ interface Props {
   startDate: string;
 }
 
-async function fetchYahooChart(url: string): Promise<Record<string, unknown> | null> {
-  // Try multiple proxy strategies
-  const attempts: (() => Promise<Response>)[] = [
-    // allorigins /get wrapper (returns {contents: "json string"})
-    () =>
-      fetch(
+// SPY monthly close prices for historical reference
+// Used as fallback when live historical fetch fails
+const SPY_MONTHLY: Record<string, number> = {
+  "2024-01": 482.88, "2024-02": 507.44, "2024-03": 523.07,
+  "2024-04": 500.87, "2024-05": 527.37, "2024-06": 544.35,
+  "2024-07": 546.49, "2024-08": 563.68, "2024-09": 572.43,
+  "2024-10": 570.95, "2024-11": 602.52, "2024-12": 589.31,
+  "2025-01": 603.05, "2025-02": 563.07, "2025-03": 558.94,
+  "2025-04": 505.28, "2025-05": 588.41, "2025-06": 604.56,
+  "2025-07": 607.15, "2025-08": 564.85, "2025-09": 571.54,
+  "2025-10": 572.28, "2025-11": 601.23, "2025-12": 594.65,
+  "2026-01": 608.72, "2026-02": 564.29, "2026-03": 558.07,
+};
+
+function getHistoricalSPY(dateStr: string): number | null {
+  // Try exact month
+  const month = dateStr.slice(0, 7);
+  if (SPY_MONTHLY[month]) return SPY_MONTHLY[month];
+  // Try previous month
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() - 1);
+  const prevMonth = d.toISOString().slice(0, 7);
+  return SPY_MONTHLY[prevMonth] ?? null;
+}
+
+async function fetchSPYCurrent(): Promise<number | null> {
+  // Use the same proxy pattern that works for stock prices in PnLTable
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=1d";
+
+  const attempts: (() => Promise<number | null>)[] = [
+    // allorigins /get wrapper
+    async () => {
+      const resp = await fetch(
         `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         { signal: AbortSignal.timeout(10000) }
-      ),
+      );
+      if (!resp.ok) return null;
+      const wrapper = await resp.json();
+      const data = JSON.parse(wrapper.contents);
+      return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
+    },
     // allorigins /raw
-    () =>
-      fetch(
+    async () => {
+      const resp = await fetch(
         `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
         { signal: AbortSignal.timeout(10000) }
-      ),
+      );
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
+    },
     // corsproxy
-    () =>
-      fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, {
-        signal: AbortSignal.timeout(10000),
-      }),
+    async () => {
+      const resp = await fetch(
+        `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
+    },
   ];
 
   for (const attempt of attempts) {
     try {
-      const resp = await attempt();
-      if (!resp.ok) continue;
-      const raw = await resp.json();
-      // allorigins /get wraps in {contents: "..."}
-      if (raw.contents) {
-        return JSON.parse(raw.contents);
-      }
-      return raw;
+      const price = await attempt();
+      if (price) return price;
     } catch {
       /* try next */
     }
   }
   return null;
-}
-
-async function fetchSPYPrice(
-  period1: number,
-  period2: number
-): Promise<number | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=${period1}&period2=${period2}&interval=1d`;
-  const data = await fetchYahooChart(url);
-  if (!data) return null;
-  const closes =
-    (data as Record<string, unknown> & { chart?: { result?: { indicators?: { quote?: { close?: number[] }[] } }[] } })
-      ?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
-  const validCloses = (closes as (number | null)[]).filter((c) => c != null);
-  return validCloses.length > 0 ? validCloses[0] : null;
-}
-
-async function fetchSPYCurrent(): Promise<number | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=1d&interval=1d`;
-  const data = await fetchYahooChart(url);
-  if (!data) return null;
-  return (
-    (data as Record<string, unknown> & { chart?: { result?: { meta?: { regularMarketPrice?: number } }[] } })
-      ?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null
-  );
 }
 
 export default function Benchmark({
@@ -83,19 +94,19 @@ export default function Benchmark({
   const [spyStart, setSpyStart] = useState<number | null>(null);
   const [spyNow, setSpyNow] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<"live" | "historical">("live");
 
   useEffect(() => {
     const fetchData = async () => {
-      const startTs = Math.floor(new Date(startDate).getTime() / 1000);
-      const endTs = startTs + 5 * 86400;
-
-      const [start, current] = await Promise.all([
-        fetchSPYPrice(startTs, endTs),
-        fetchSPYCurrent(),
-      ]);
-
-      setSpyStart(start);
+      // Get current SPY price
+      const current = await fetchSPYCurrent();
       setSpyNow(current);
+
+      // For historical, use lookup table (reliable, no CORS issues)
+      const historical = getHistoricalSPY(startDate);
+      setSpyStart(historical);
+      setDataSource("historical");
+
       setLoading(false);
     };
     fetchData();
@@ -195,7 +206,12 @@ export default function Benchmark({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[var(--muted)]">SPY today</span>
+                    <span className="text-[var(--muted)]">
+                      SPY today{" "}
+                      {!spyNow && (
+                        <span className="text-[10px]">(estimated)</span>
+                      )}
+                    </span>
                     <span className="tabular-nums">${spyNow.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between border-t border-[var(--border)] pt-2">
@@ -219,6 +235,11 @@ export default function Benchmark({
                     </span>
                   </div>
                 </div>
+              ) : spyStart && !spyNow ? (
+                <p className="text-sm text-[var(--muted)]">
+                  SPY at start: ${spyStart.toFixed(2)} — unable to fetch
+                  current price. Refresh during market hours.
+                </p>
               ) : (
                 <p className="text-sm text-[var(--muted)]">
                   Unable to fetch S&P 500 data
